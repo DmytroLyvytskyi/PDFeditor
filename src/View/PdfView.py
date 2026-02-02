@@ -7,6 +7,9 @@ class PdfView(QMainWindow):
     def __init__(self,viewmodel):
         super().__init__()
         self.viewmodel = viewmodel
+        self.viewmodel.page_changed.connect(self.show_page)
+
+
         self.setWindowTitle("PdfEditor")
 
 
@@ -57,11 +60,10 @@ class PdfView(QMainWindow):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
         if file_path != "":
             self.viewmodel.open_file(file_path)
-            self.show(self.viewmodel.get_page())
             self.total.setText(f"/{self.viewmodel.get_total()}")
 
 
-    def show(self, image):
+    def show_page(self, image):
         if image is not None:
             pixmap = QPixmap.fromImage(image)
             self.label.setPixmap(pixmap)
@@ -71,13 +73,10 @@ class PdfView(QMainWindow):
 
     def _prev_page(self):
         self.viewmodel.prev_page()
-        self.show(self.viewmodel.get_page())
 
     def _next_page(self):
         self.viewmodel.next_page()
-        self.show(self.viewmodel.get_page())
 
 
     def _selector_pressed(self):
         self.viewmodel.set_current_page_number(min(int(self.page_selector.text()),self.viewmodel.get_total()))
-        self.show(self.viewmodel.get_page())

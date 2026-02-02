@@ -12,4 +12,8 @@ class PdfModel:
     def get_page(self, num):
         return self.file[num]
 
+    def render_page(self, num):
+        page = self.file[num]
+        return page.get_pixmap()
+
 
