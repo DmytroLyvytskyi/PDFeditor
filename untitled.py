@@ -16,8 +16,9 @@ from PySide6.QtGui import (QBrush, QColor, QConicalGradient, QCursor,
     QImage, QKeySequence, QLinearGradient, QPainter,
     QPalette, QPixmap, QRadialGradient, QTransform)
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit,
-    QMainWindow, QMenuBar, QPushButton, QSizePolicy,
-    QSpacerItem, QStatusBar, QVBoxLayout, QWidget)
+    QMainWindow, QMenuBar, QPushButton, QScrollArea,
+    QSizePolicy, QSpacerItem, QStatusBar, QVBoxLayout,
+    QWidget)
 
 class Ui_MainWindow(object):
     def setupUi(self, MainWindow):
@@ -62,11 +63,19 @@ class Ui_MainWindow(object):
 
         self.verticalLayout.addLayout(self.horizontalLayout)
 
-        self.label = QLabel(self.centralwidget)
-        self.label.setObjectName(u"label")
-        self.label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scrollArea = QScrollArea(self.centralwidget)
+        self.scrollArea.setObjectName(u"scrollArea")
+        self.scrollArea.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
+        self.scrollArea.setWidgetResizable(True)
+        self.scrollArea.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self.scrollAreaWidgetContents_5 = QWidget()
+        self.scrollAreaWidgetContents_5.setObjectName(u"scrollAreaWidgetContents_5")
+        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 666))
+        self.page_scroll = QVBoxLayout(self.scrollAreaWidgetContents_5)
+        self.page_scroll.setObjectName(u"page_scroll")
+        self.scrollArea.setWidget(self.scrollAreaWidgetContents_5)
 
-        self.verticalLayout.addWidget(self.label)
+        self.verticalLayout.addWidget(self.scrollArea)
 
         self.open_btn = QPushButton(self.centralwidget)
         self.open_btn.setObjectName(u"open_btn")
@@ -92,7 +101,6 @@ class Ui_MainWindow(object):
         self.prev_btn.setText(QCoreApplication.translate("MainWindow", u"<-", None))
         self.total.setText(QCoreApplication.translate("MainWindow", u"/", None))
         self.next_btn.setText(QCoreApplication.translate("MainWindow", u"->", None))
-        self.label.setText(QCoreApplication.translate("MainWindow", u"No PDF loaded", None))
         self.open_btn.setText(QCoreApplication.translate("MainWindow", u"Open Pdf", None))
     # retranslateUi
 

@@ -33,6 +33,12 @@ class PdfViewModel(QObject):
         image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         self.page_changed.emit(image)
 
+    def get_page_i(self, i):
+        pix = self.Model.render_page(i)
+        image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
+        return image
+
+
 
     def get_total(self):
         return self.Model.total

@@ -25,12 +25,26 @@ class PdfView(QMainWindow):
         if file_path != "":
             self.viewmodel.open_file(file_path)
             self.ui.total.setText(f"/{self.viewmodel.get_total()}")
+            self.load_all()
+
+
+
+    def load_all(self):
+        #test version
+        layout = self.ui.page_scroll
+        for i in range(self.viewmodel.get_total()):
+            image = self.viewmodel.get_page_i(i)
+            page_label = QLabel()
+            pixmap = QPixmap.fromImage(image)
+            page_label.setAlignment(Qt.AlignCenter)
+            page_label.setPixmap(pixmap)
+            layout.addWidget(page_label)
+
 
 
     def show_page(self, image):
         if image is not None:
             pixmap = QPixmap.fromImage(image)
-            self.ui.label.setPixmap(pixmap)
             self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
 
 
