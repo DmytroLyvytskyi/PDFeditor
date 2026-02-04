@@ -8,6 +8,7 @@ class PdfViewModel(QObject):
         super().__init__()
         self.Model = Model
         self.current_page = 0  # starts from 0
+        self.loaded_count = 0
 
 
 
@@ -50,4 +51,14 @@ class PdfViewModel(QObject):
     def set_current_page_number(self, page):
         self.current_page = page - 1
         self._update_page()
+
+
+    def get_next_pages(self, count):
+        result = []
+        for i in range(self.loaded_count, min(self.loaded_count+count, self.Model.total)):
+            result.append(self.get_page_i(i))
+            self.loaded_count+=1
+        print(self.loaded_count)
+        return result
+
 

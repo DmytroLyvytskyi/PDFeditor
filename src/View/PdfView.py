@@ -18,6 +18,8 @@ class PdfView(QMainWindow):
         self.ui.next_btn.clicked.connect(self._next_page)
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
 
+        self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
+
 
 
     def _open_file(self):
@@ -25,20 +27,33 @@ class PdfView(QMainWindow):
         if file_path != "":
             self.viewmodel.open_file(file_path)
             self.ui.total.setText(f"/{self.viewmodel.get_total()}")
-            self.load_all()
+            self.load_group()
 
 
+    def _scrolled(self):
+        # 1 page ≈ 850
+        #print(self.ui.scrollArea.verticalScrollBar().sliderPosition(), self.ui.scrollArea.verticalScrollBar().maximum())
+        # print(self.ui.page_scroll.count())
 
-    def load_all(self):
-        #test version
+        max_height = self.ui.scrollArea.verticalScrollBar().maximum()
+        cur_height = self.ui.scrollArea.verticalScrollBar().value()
+        #print(max_height,cur_height)
+        if ((max_height - cur_height < 850*4) and self.ui.page_scroll.count() < self.viewmodel.get_total()):
+            self.load_group()
+
+
+    def load_group(self):
         layout = self.ui.page_scroll
-        for i in range(self.viewmodel.get_total()):
-            image = self.viewmodel.get_page_i(i)
+        pages = self.viewmodel.get_next_pages(5)
+        for i in pages:
+            image = i
             page_label = QLabel()
             pixmap = QPixmap.fromImage(image)
             page_label.setAlignment(Qt.AlignCenter)
             page_label.setPixmap(pixmap)
             layout.addWidget(page_label)
+
+
 
 
 
