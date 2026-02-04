@@ -11,7 +11,6 @@ class PdfView(QMainWindow):
         self.ui.setupUi(self)
 
         self.viewmodel = viewmodel
-        self.viewmodel.page_changed.connect(self.show_page)
 
         self.ui.open_btn.clicked.connect(self._open_file)
         self.ui.prev_btn.clicked.connect(self._prev_page)
@@ -19,6 +18,8 @@ class PdfView(QMainWindow):
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
 
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
+
+        self.pages_QWidget = []
 
 
 
@@ -52,24 +53,31 @@ class PdfView(QMainWindow):
             page_label.setAlignment(Qt.AlignCenter)
             page_label.setPixmap(pixmap)
             layout.addWidget(page_label)
+            self.pages_QWidget.append(page_label)
 
 
 
 
-
-    def show_page(self, image):
-        if image is not None:
-            pixmap = QPixmap.fromImage(image)
-            self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
+    def scroll_to(self, num):
+        self.ui.scrollArea.ensureWidgetVisible(self.pages_QWidget[num])
 
 
 
     def _prev_page(self):
         self.viewmodel.prev_page()
+        self.scroll_to(self.viewmodel.current_page)
 
     def _next_page(self):
         self.viewmodel.next_page()
+        self.scroll_to(self.viewmodel.current_page)
 
 
     def _selector_pressed(self):
-        self.viewmodel.set_current_page_number(min(int(self.ui.page_selector.text()),self.viewmodel.get_total()))
+        num = min(int(self.ui.page_selector.text()),self.viewmodel.get_total())
+        self.viewmodel.set_current_page_number(num)
+        while len(self.pages_QWidget) < num:
+            self.load_group()
+
+        self.scroll_to(self.viewmodel.current_page)
+
+
