@@ -1,7 +1,7 @@
 from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
     QLineEdit
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QTimer
 from untitled import Ui_MainWindow
 class PdfView(QMainWindow):
     def __init__(self,viewmodel):
@@ -77,7 +77,6 @@ class PdfView(QMainWindow):
         self.viewmodel.set_current_page_number(num)
         while len(self.pages_QWidget) < num:
             self.load_group()
-
-        self.scroll_to(self.viewmodel.current_page)
-
+        self.ui.scrollArea.widget().layout().activate()
+        QTimer.singleShot(0, lambda: self.scroll_to(self.viewmodel.current_page))
 
