@@ -3,6 +3,8 @@ from PySide6.QtGui import QImage
 
 class PdfViewModel(QObject):
 
+    page_number_changed = Signal()
+
     def __init__(self, Model):
         super().__init__()
         self.Model = Model
@@ -19,12 +21,20 @@ class PdfViewModel(QObject):
     def next_page(self):
         if (self.current_page + 1) < self.Model.total:
             self.current_page += 1
+            self.page_number_changed.emit()
 
     def prev_page(self):
         if self.current_page > 0:
             self.current_page -= 1
+            self.page_number_changed.emit()
+
+    def get_current_page_number(self):
+        return self.current_page + 1
 
 
+    def set_current_page_number(self, page):
+        self.current_page = page - 1
+        self.page_number_changed.emit()
 
     def get_page_i(self, i):
         pix = self.Model.render_page(i)
@@ -35,13 +45,6 @@ class PdfViewModel(QObject):
 
     def get_total(self):
         return self.Model.total
-
-    def get_current_page_number(self):
-        return self.current_page + 1
-
-
-    def set_current_page_number(self, page):
-        self.current_page = page - 1
 
 
     def get_next_pages(self, count):
