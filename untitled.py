@@ -66,12 +66,12 @@ class Ui_MainWindow(object):
         self.scrollArea = QScrollArea(self.centralwidget)
         self.scrollArea.setObjectName(u"scrollArea")
         self.scrollArea.setLayoutDirection(Qt.LayoutDirection.LeftToRight)
-        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOn)
+        self.scrollArea.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self.scrollArea.setWidgetResizable(True)
         self.scrollArea.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.scrollAreaWidgetContents_5 = QWidget()
         self.scrollAreaWidgetContents_5.setObjectName(u"scrollAreaWidgetContents_5")
-        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 963, 666))
+        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 634))
         self.page_scroll = QVBoxLayout(self.scrollAreaWidgetContents_5)
         self.page_scroll.setObjectName(u"page_scroll")
         self.scrollArea.setWidget(self.scrollAreaWidgetContents_5)
@@ -82,6 +82,11 @@ class Ui_MainWindow(object):
         self.open_btn.setObjectName(u"open_btn")
 
         self.verticalLayout.addWidget(self.open_btn)
+
+        self.save_btn = QPushButton(self.centralwidget)
+        self.save_btn.setObjectName(u"save_btn")
+
+        self.verticalLayout.addWidget(self.save_btn)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
@@ -103,5 +108,6 @@ class Ui_MainWindow(object):
         self.total.setText(QCoreApplication.translate("MainWindow", u"/", None))
         self.next_btn.setText(QCoreApplication.translate("MainWindow", u"->", None))
         self.open_btn.setText(QCoreApplication.translate("MainWindow", u"Open Pdf", None))
+        self.save_btn.setText(QCoreApplication.translate("MainWindow", u"Save", None))
     # retranslateUi
 

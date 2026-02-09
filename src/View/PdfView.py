@@ -17,12 +17,16 @@ class PdfView(QMainWindow):
         self.ui.prev_btn.clicked.connect(self._prev_page)
         self.ui.next_btn.clicked.connect(self._next_page)
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
+        self.ui.save_btn.clicked.connect(self._save_file)
 
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
 
         self.pages_QWidget = []
 
-
+    def _save_file(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")
+        if file_path != "":
+            self.viewmodel.save_file(file_path)
 
     def _open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")

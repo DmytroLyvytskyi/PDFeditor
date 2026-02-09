@@ -12,4 +12,7 @@ class PdfModel:
         page = self.file[num]
         return page.get_pixmap()
 
+    def save_file(self, path):
+        self.file.save(path)
+
 

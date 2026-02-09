@@ -12,6 +12,9 @@ class PdfViewModel(QObject):
         self.loaded_count = 0
 
 
+    def save_file(self, path):
+        self.Model.save_file(path)
+
 
     def open_file(self, path):
         self.Model.open_file(path)
