@@ -2,6 +2,8 @@ from PySide6.QtGui import QPixmap
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
     QLineEdit
 from PySide6.QtCore import Qt, QTimer
+
+from src.View.PageQLabel import PageQLabel
 from untitled import Ui_MainWindow
 class PdfView(QMainWindow):
     def __init__(self,viewmodel):
@@ -18,6 +20,7 @@ class PdfView(QMainWindow):
         self.ui.next_btn.clicked.connect(self._next_page)
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
         self.ui.save_btn.clicked.connect(self._save_file)
+
 
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
 
@@ -52,14 +55,40 @@ class PdfView(QMainWindow):
     def load_group(self):
         layout = self.ui.page_scroll
         pages = self.viewmodel.get_next_pages(5)
-        for i in pages:
+        start_index = len(self.pages_QWidget)
+        for index, i in enumerate(pages):
             image = i
-            page_label = QLabel()
             pixmap = QPixmap.fromImage(image)
-            page_label.setAlignment(Qt.AlignCenter)
-            page_label.setPixmap(pixmap)
+            page_label = PageQLabel(pixmap,index + start_index)
+            #page_label.setAlignment(Qt.AlignCenter)
+            #page_label.setPixmap(pixmap)
+            page_label.coords.connect(self.page_clicked)
             layout.addWidget(page_label)
             self.pages_QWidget.append(page_label)
+
+    def rerender_page(self, page_index):
+        new = self.viewmodel.get_page_i(page_index)
+        self.pages_QWidget[page_index].setPixmap(QPixmap.fromImage(new))
+
+    def page_clicked(self, x, y, page_index):
+        label = self.pages_QWidget[page_index]
+        pixmap = label.pixmap()
+        x_offset = label.width()/2 - pixmap.width()/2
+        self.add_text = QLineEdit(label)
+        self.add_text.move(x+x_offset,y)
+        self.add_text.show()
+        self.add_text.setFocus()
+        self.add_text.returnPressed.connect(lambda: self.save_text(x,y+self.add_text.height(),page_index))#left bottom and left top
+        #without offset because pymupdf works with the coordinates of the file
+
+
+    def save_text(self, x, y, page_index):
+        text = self.add_text.text()
+        if text != "":
+            self.viewmodel.add_text(text, x, y, page_index)
+        self.add_text.deleteLater()
+        self.add_text = None
+        self.rerender_page(page_index)
 
 
 

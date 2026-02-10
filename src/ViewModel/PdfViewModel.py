@@ -58,3 +58,7 @@ class PdfViewModel(QObject):
         return result
 
 
+    def add_text(self, text, x, y, page_index):
+        self.Model.add_text(text, x, y, page_index)
+
+

@@ -16,3 +16,8 @@ class PdfModel:
         self.file.save(path)
 
 
+    def add_text(self, text, x, y, page_index):
+        page = self.file[page_index]
+        page.insert_text((x,y), text)
+
+
