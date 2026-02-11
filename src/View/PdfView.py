@@ -3,6 +3,7 @@ from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QF
     QLineEdit
 from PySide6.QtCore import Qt, QTimer
 
+from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.PageQLabel import PageQLabel
 from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
@@ -27,7 +28,9 @@ class PdfView(QMainWindow):
         self.mode_group.addAction(self.ui.actionAdd_Text)
         self.mode_group.addAction(self.ui.actionEdit_Text)
         self.mode_group.setExclusive(True)
-        self.ui.actionView.setChecked(True)
+
+        self.ui.actionAdd_Text.setChecked(True)
+        self.viewmodel.set_mode(EditorMode.ADD_TEXT)
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
         self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
@@ -94,17 +97,24 @@ class PdfView(QMainWindow):
         label = self.pages_QWidget[page_index]
         pixmap = label.pixmap()
         x_offset = label.width() / 2 - pixmap.width() / 2
-        self.add_text = QLineEdit(label)
-        self.add_text.move(x + x_offset, y)
+        self.add_text = DraggableLineEdit(label)
+        self.add_text.move(x + x_offset, y-self.add_text.height()/2)
         self.add_text.show()
         self.add_text.setFocus()
         self.add_text.returnPressed.connect(
-            lambda: self.save_text(x, y + self.add_text.height(), page_index))  # left bottom and left top
+            lambda: self.save_text(x, y, page_index))
         # without offset because pymupdf works with the coordinates of the file
+
+
 
     def save_text(self, x, y, page_index):
         text = self.add_text.text()
         if text != "":
+            label = self.pages_QWidget[page_index]
+            pixmap = label.pixmap()
+            x_offset = label.width() / 2 - pixmap.width() / 2
+            x = self.add_text.x() - x_offset
+            y = self.add_text.y() + self.add_text.height()
             self.viewmodel.add_text(text, x, y, page_index)
         self.add_text.deleteLater()
         self.add_text = None

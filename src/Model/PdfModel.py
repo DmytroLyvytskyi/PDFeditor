@@ -18,6 +18,8 @@ class PdfModel:
 
     def add_text(self, text, x, y, page_index):
         page = self.file[page_index]
-        page.insert_text((x,y), text)
+        fontsize = 12
+        y = y-fontsize/2
+        page.insert_text((x,y), text, fontsize = fontsize)
 
 

@@ -3,10 +3,10 @@ from PySide6.QtWidgets import QLabel
 
 
 class PageQLabel(QLabel):
-    coords = Signal(int, int, int) # x, y, page_index(id)
+    coords = Signal(int, int, int) # x, y relative to pixmap(left top corner), page_index(id)
 
-    def __init__(self, pixmap=None, id=None):
-        super().__init__()
+    def __init__(self, pixmap=None, id=None, parent=None):
+        super().__init__(parent)
         self.setAlignment(Qt.AlignCenter)
         self.setPixmap(pixmap)
         self.id = id
