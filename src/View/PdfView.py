@@ -1,9 +1,10 @@
-from PySide6.QtGui import QPixmap
+from PySide6.QtGui import QPixmap, QActionGroup
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
     QLineEdit
 from PySide6.QtCore import Qt, QTimer
 
 from src.View.PageQLabel import PageQLabel
+from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
 class PdfView(QMainWindow):
     def __init__(self,viewmodel):
@@ -20,6 +21,17 @@ class PdfView(QMainWindow):
         self.ui.next_btn.clicked.connect(self._next_page)
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
         self.ui.save_btn.clicked.connect(self._save_file)
+
+        self.mode_group = QActionGroup(self)
+        self.mode_group.addAction(self.ui.actionView)
+        self.mode_group.addAction(self.ui.actionAdd_Text)
+        self.mode_group.addAction(self.ui.actionEdit_Text)
+        self.mode_group.setExclusive(True)
+        self.ui.actionView.setChecked(True)
+        self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
+        self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
+        self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
+
 
 
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
@@ -71,16 +83,24 @@ class PdfView(QMainWindow):
         self.pages_QWidget[page_index].setPixmap(QPixmap.fromImage(new))
 
     def page_clicked(self, x, y, page_index):
+        if self.viewmodel.mode == EditorMode.VIEW:
+            return
+
+        if self.viewmodel.mode == EditorMode.ADD_TEXT:
+            self.add_text_func(x, y, page_index)
+
+
+    def add_text_func(self, x, y, page_index):
         label = self.pages_QWidget[page_index]
         pixmap = label.pixmap()
-        x_offset = label.width()/2 - pixmap.width()/2
+        x_offset = label.width() / 2 - pixmap.width() / 2
         self.add_text = QLineEdit(label)
-        self.add_text.move(x+x_offset,y)
+        self.add_text.move(x + x_offset, y)
         self.add_text.show()
         self.add_text.setFocus()
-        self.add_text.returnPressed.connect(lambda: self.save_text(x,y+self.add_text.height(),page_index))#left bottom and left top
-        #without offset because pymupdf works with the coordinates of the file
-
+        self.add_text.returnPressed.connect(
+            lambda: self.save_text(x, y + self.add_text.height(), page_index))  # left bottom and left top
+        # without offset because pymupdf works with the coordinates of the file
 
     def save_text(self, x, y, page_index):
         text = self.add_text.text()
@@ -137,4 +157,6 @@ class PdfView(QMainWindow):
 
     def set_selector(self):
         self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
+
+
 

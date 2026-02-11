@@ -1,20 +1,29 @@
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage
 
+from src.ViewModel.EditorMode import EditorMode
+
+
 class PdfViewModel(QObject):
 
     page_number_changed = Signal()
+    mode_changed = Signal(EditorMode)
 
     def __init__(self, Model):
         super().__init__()
         self.Model = Model
         self.current_page = 0  # current page for pc
         self.loaded_count = 0
+        self.mode = EditorMode.VIEW
 
 
     def save_file(self, path):
         self.Model.save_file(path)
 
+
+    def set_mode(self, mode):
+        self.mode = mode
+        self.mode_changed.emit(mode)
 
     def open_file(self, path):
         self.Model.open_file(path)
