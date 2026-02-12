@@ -16,10 +16,10 @@ class PdfModel:
         self.file.save(path)
 
 
-    def add_text(self, text, x, y, page_index):
+    def add_text(self, text, x, y, page_index, font, fontsize, color):
         page = self.file[page_index]
-        fontsize = 12
         y = y-fontsize/2
-        page.insert_text((x,y), text, fontsize = fontsize)
+        pdf_color = (color.red() / 255.0,color.green() / 255.0,color.blue() / 255.0)
+        page.insert_text((x,y), text, fontsize = fontsize, fontname = font, color = pdf_color)
 
 

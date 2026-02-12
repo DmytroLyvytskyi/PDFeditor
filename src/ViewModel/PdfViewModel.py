@@ -1,5 +1,5 @@
 from PySide6.QtCore import QObject, Signal
-from PySide6.QtGui import QImage
+from PySide6.QtGui import QImage, QColor
 
 from src.ViewModel.EditorMode import EditorMode
 
@@ -15,10 +15,22 @@ class PdfViewModel(QObject):
         self.current_page = 0  # current page for pc
         self.loaded_count = 0
         self.mode = EditorMode.VIEW
+        self.current_font = "helv"
+        self.current_fontsize = 12
+        self.current_color = QColor(0, 0, 0)
 
 
     def save_file(self, path):
         self.Model.save_file(path)
+
+    def set_current_font(self, font_name):
+        self.current_font = font_name
+
+    def set_current_size(self, size):
+        self.current_fontsize = size
+
+    def set_current_color(self, color):
+        self.current_color = color
 
 
     def set_mode(self, mode):
@@ -68,6 +80,6 @@ class PdfViewModel(QObject):
 
 
     def add_text(self, text, x, y, page_index):
-        self.Model.add_text(text, x, y, page_index)
+        self.Model.add_text(text, x, y, page_index, self.current_font, self.current_fontsize, self.current_color)
 
 

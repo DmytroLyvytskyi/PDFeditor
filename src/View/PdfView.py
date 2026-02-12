@@ -1,6 +1,6 @@
-from PySide6.QtGui import QPixmap, QActionGroup
+from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
-    QLineEdit
+    QLineEdit, QComboBox, QSpinBox, QColorDialog
 from PySide6.QtCore import Qt, QTimer
 
 from src.View.DraggableLineEdit import DraggableLineEdit
@@ -11,11 +11,18 @@ class PdfView(QMainWindow):
     def __init__(self,viewmodel):
         super().__init__()
 
+        self.size_choose = None
+        self.font_choose = None
+        self.current_color = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.setup_toolbar()
+        self.ui.toolBar_2.hide()
 
         self.viewmodel = viewmodel
         self.viewmodel.page_number_changed.connect(self.set_selector)
+        self.viewmodel.mode_changed.connect(self.update_toolbar_visibility)
+
 
         self.ui.open_btn.clicked.connect(self._open_file)
         self.ui.prev_btn.clicked.connect(self._prev_page)
@@ -40,6 +47,66 @@ class PdfView(QMainWindow):
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
 
         self.pages_QWidget = []
+
+    def setup_toolbar(self):
+        toolbar = self.ui.toolBar_2
+        toolbar.addWidget(QLabel("Color: "))
+        self.ui.color_choose = QAction("Choose Color", self)
+        toolbar.addAction(self.ui.color_choose)
+
+        self.ui.color_choose.triggered.connect(self.open_color_dialog)
+
+        self.current_color = QColor(0, 0, 0)
+        self.update_color_action_icon()
+
+        toolbar.addWidget(QLabel("Font: "))
+        self.font_choose = QComboBox()
+        self.font_choose.addItems(["Helvetica", "Times New Roman", "Courier New"]) # add detection of fonts used in pdf !!
+        self.font_choose.setFixedWidth(150)
+        toolbar.addWidget(self.font_choose)
+
+        toolbar.addWidget(QLabel("Size: "))
+        self.size_choose = QSpinBox()
+        self.size_choose.setRange(5, 80)
+        self.size_choose.setValue(12)
+        self.size_choose.setSuffix(" pt")
+        toolbar.addWidget(self.size_choose)
+
+        self.font_choose.currentTextChanged.connect(self.change_font)
+        self.size_choose.valueChanged.connect(self.change_size)
+
+
+    def change_font(self, text):
+        font_map = {
+            "Helvetica": "helv",
+            "Times New Roman": "tiro",
+            "Courier New": "cour"
+        }
+        font = font_map[text]
+        self.viewmodel.set_current_font(font)
+
+    def change_size(self, value):
+        self.viewmodel.set_current_size(value)
+
+
+    def update_color_action_icon(self):
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(self.current_color)
+        self.ui.color_choose.setIcon(QIcon(pixmap))
+
+
+    def update_toolbar_visibility(self, mode):
+        if mode == EditorMode.VIEW:
+            self.ui.toolBar_2.hide()
+        else:
+            self.ui.toolBar_2.show()
+
+    def open_color_dialog(self):
+        color = QColorDialog.getColor(initial=self.current_color)
+        if color.isValid():
+            self.current_color = color
+            self.update_color_action_icon()
+            self.viewmodel.set_current_color(self.current_color)
 
     def _save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")

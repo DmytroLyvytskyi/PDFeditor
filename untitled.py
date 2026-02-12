@@ -84,7 +84,7 @@ class Ui_MainWindow(object):
         self.scrollArea.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.scrollAreaWidgetContents_5 = QWidget()
         self.scrollAreaWidgetContents_5.setObjectName(u"scrollAreaWidgetContents_5")
-        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 608))
+        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 596))
         self.page_scroll = QVBoxLayout(self.scrollAreaWidgetContents_5)
         self.page_scroll.setObjectName(u"page_scroll")
         self.scrollArea.setWidget(self.scrollAreaWidgetContents_5)
@@ -112,6 +112,10 @@ class Ui_MainWindow(object):
         self.toolBar = QToolBar(MainWindow)
         self.toolBar.setObjectName(u"toolBar")
         MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar)
+        self.toolBar_2 = QToolBar(MainWindow)
+        self.toolBar_2.setObjectName(u"toolBar_2")
+        MainWindow.addToolBar(Qt.ToolBarArea.TopToolBarArea, self.toolBar_2)
+        MainWindow.insertToolBarBreak(self.toolBar_2)
 
         self.toolBar.addAction(self.actionView)
         self.toolBar.addAction(self.actionAdd_Text)
@@ -133,5 +137,6 @@ class Ui_MainWindow(object):
         self.open_btn.setText(QCoreApplication.translate("MainWindow", u"Open Pdf", None))
         self.save_btn.setText(QCoreApplication.translate("MainWindow", u"Save", None))
         self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar", None))
+        self.toolBar_2.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar_2", None))
     # retranslateUi
 
