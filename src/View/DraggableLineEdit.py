@@ -1,4 +1,5 @@
 from PySide6.QtCore import Qt, QPoint
+from PySide6.QtGui import QFont, QFontMetrics
 from PySide6.QtWidgets import QWidget, QLineEdit
 
 
@@ -8,7 +9,7 @@ class DraggableLineEdit(QLineEdit):
         super().__init__(parent)
         self.drag = False
         self.offset = QPoint(0, 0)
-
+        self.textChanged.connect(self.adjust_size)
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -18,6 +19,13 @@ class DraggableLineEdit(QLineEdit):
         else:
             super().mousePressEvent(event)
 
+    def adjust_size(self):
+        metrics = QFontMetrics(self.font())
+        text = self.text()
+        width = metrics.horizontalAdvance(text)
+        height = metrics.height()
+        padding = 10
+        self.resize(width + padding, height + padding)
 
     def mouseMoveEvent(self, event):
         if self.drag:
@@ -29,3 +37,19 @@ class DraggableLineEdit(QLineEdit):
     def mouseReleaseEvent(self, event):
         self.drag = False
         super().mouseReleaseEvent(event)
+
+    def apply_change(self,font, fontsize, color):
+        font_map = {
+            "helv": "Helvetica",
+            "tiro": "Times New Roman",
+            "cour": "Courier New"
+        }
+        qt_font = QFont(font_map[font],fontsize)
+        self.setFont(qt_font)
+        self.setStyleSheet(
+            f"color: rgb({color.red()}, {color.green()}, {color.blue()});"
+            "background: transparent;"
+            "border: 1px dashed gray;"
+        )
+        self.adjust_size()
+

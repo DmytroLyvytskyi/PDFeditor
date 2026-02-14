@@ -14,6 +14,7 @@ class PdfView(QMainWindow):
         self.size_choose = None
         self.font_choose = None
         self.current_color = None
+        self.add_text = None
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setup_toolbar()
@@ -84,9 +85,19 @@ class PdfView(QMainWindow):
         }
         font = font_map[text]
         self.viewmodel.set_current_font(font)
+        self.add_text.apply_change(
+            self.viewmodel.current_font,
+            self.viewmodel.current_fontsize,
+            self.viewmodel.current_color
+        )
 
     def change_size(self, value):
         self.viewmodel.set_current_size(value)
+        self.add_text.apply_change(
+            self.viewmodel.current_font,
+            self.viewmodel.current_fontsize,
+            self.viewmodel.current_color
+        )
 
 
     def update_color_action_icon(self):
@@ -107,6 +118,11 @@ class PdfView(QMainWindow):
             self.current_color = color
             self.update_color_action_icon()
             self.viewmodel.set_current_color(self.current_color)
+            self.add_text.apply_change(
+                self.viewmodel.current_font,
+                self.viewmodel.current_fontsize,
+                self.viewmodel.current_color
+            )
 
     def _save_file(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")
@@ -164,6 +180,10 @@ class PdfView(QMainWindow):
         label = self.pages_QWidget[page_index]
         pixmap = label.pixmap()
         x_offset = label.width() / 2 - pixmap.width() / 2
+        if self.add_text != None:
+            self.add_text.deleteLater()
+            self.add_text = None
+
         self.add_text = DraggableLineEdit(label)
         self.add_text.move(x + x_offset, y-self.add_text.height()/2)
         self.add_text.show()
@@ -171,7 +191,11 @@ class PdfView(QMainWindow):
         self.add_text.returnPressed.connect(
             lambda: self.save_text(x, y, page_index))
         # without offset because pymupdf works with the coordinates of the file
-
+        self.add_text.apply_change(
+            self.viewmodel.current_font,
+            self.viewmodel.current_fontsize,
+            self.viewmodel.current_color
+        )
 
 
     def save_text(self, x, y, page_index):
