@@ -20,6 +20,11 @@ class PdfViewModel(QObject):
         self.current_color = QColor(0, 0, 0)
 
 
+
+    def get_spans_i(self, page_index):
+        return self.Model.get_spans_i(page_index)
+
+
     def save_file(self, path):
         self.Model.save_file(path)
 
@@ -41,6 +46,8 @@ class PdfViewModel(QObject):
         self.Model.open_file(path)
         self.current_page = 0
 
+    def move_text(self,x,y,text_data,bbox):
+        self.Model.move_text(x,y,text_data,bbox,self.current_page)
 
     def next_page(self):
         if (self.current_page + 1) < self.Model.total:

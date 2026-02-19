@@ -1,10 +1,12 @@
-from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction
+from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction, QPen, QFont
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
     QLineEdit, QComboBox, QSpinBox, QColorDialog
 from PySide6.QtCore import Qt, QTimer
 
 from src.View.DraggableLineEdit import DraggableLineEdit
+from src.View.EditTextQLabel import EditTextQLabel
 from src.View.PageQLabel import PageQLabel
+from src.View.TextData import TextData
 from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
 class PdfView(QMainWindow):
@@ -15,21 +17,15 @@ class PdfView(QMainWindow):
         self.font_choose = None
         self.current_color = None
         self.add_text = None
+        self.viewmodel = viewmodel
+
+
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
         self.setup_toolbar()
         self.ui.toolBar_2.hide()
 
-        self.viewmodel = viewmodel
-        self.viewmodel.page_number_changed.connect(self.set_selector)
-        self.viewmodel.mode_changed.connect(self.update_toolbar_visibility)
 
-
-        self.ui.open_btn.clicked.connect(self._open_file)
-        self.ui.prev_btn.clicked.connect(self._prev_page)
-        self.ui.next_btn.clicked.connect(self._next_page)
-        self.ui.page_selector.returnPressed.connect(self._selector_pressed)
-        self.ui.save_btn.clicked.connect(self._save_file)
 
         self.mode_group = QActionGroup(self)
         self.mode_group.addAction(self.ui.actionView)
@@ -39,12 +35,18 @@ class PdfView(QMainWindow):
 
         self.ui.actionAdd_Text.setChecked(True)
         self.viewmodel.set_mode(EditorMode.ADD_TEXT)
+
+
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
         self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
-
-
-
+        self.viewmodel.page_number_changed.connect(self.set_selector)
+        self.viewmodel.mode_changed.connect(self.mode_changed)
+        self.ui.open_btn.clicked.connect(self._open_file)
+        self.ui.prev_btn.clicked.connect(self._prev_page)
+        self.ui.next_btn.clicked.connect(self._next_page)
+        self.ui.page_selector.returnPressed.connect(self._selector_pressed)
+        self.ui.save_btn.clicked.connect(self._save_file)
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
 
         self.pages_QWidget = []
@@ -105,12 +107,46 @@ class PdfView(QMainWindow):
         pixmap.fill(self.current_color)
         self.ui.color_choose.setIcon(QIcon(pixmap))
 
+    def mode_changed(self,mode):
+        self.update_toolbar_visibility(mode)
+        if mode == EditorMode.EDIT_TEXT:
+            self.prepare_edit_mode()
+
+    def prepare_edit_mode(self):
+        label = self.pages_QWidget[self.viewmodel.current_page]
+        pixmap = label.pixmap()
+        padding = 5
+        spans = self.viewmodel.get_spans_i(self.viewmodel.current_page)
+        for size,font,color,text,bbox in spans:
+            text_data = TextData(text,font,size,color)
+            x = int(bbox[0])
+            y = int(bbox[1])
+            width = int(bbox[2] - bbox[0])
+            height = int(bbox[3] - bbox[1])
+            edit_text = EditTextQLabel(text_data, width + padding, height + padding,bbox, label)
+            x_offset = label.width() / 2 - pixmap.width() / 2
+            edit_text.move(x + x_offset - padding, y)
+            edit_text.coords.connect(self.move_text)
+
+    def move_text(self,x,y,bbox):
+        sender_widget = self.sender()
+        text_data = sender_widget.text_data
+        label = sender_widget.parent()
+        pixmap = label.pixmap()
+        x_offset = label.width() / 2 - pixmap.width() / 2
+        y_offset = sender_widget.height() * 0.66
+        self.viewmodel.move_text(x - x_offset, y + y_offset, text_data, bbox)
+        self.rerender_page(self.viewmodel.current_page)
+        new_bbox = (sender_widget.x()-x_offset, sender_widget.y(), sender_widget.x()-x_offset+sender_widget.width(),sender_widget.y() + sender_widget.height())
+        sender_widget.bbox = new_bbox
+
 
     def update_toolbar_visibility(self, mode):
         if mode == EditorMode.VIEW:
             self.ui.toolBar_2.hide()
         else:
             self.ui.toolBar_2.show()
+
 
     def open_color_dialog(self):
         color = QColorDialog.getColor(initial=self.current_color)
@@ -174,6 +210,11 @@ class PdfView(QMainWindow):
 
         if self.viewmodel.mode == EditorMode.ADD_TEXT:
             self.add_text_func(x, y, page_index)
+        elif self.viewmodel.mode == EditorMode.EDIT_TEXT:
+            self.edit_text_func(x,y, page_index)
+
+    def edit_text_func(self, x, y, page_index):
+        pass
 
 
     def add_text_func(self, x, y, page_index):
@@ -210,7 +251,6 @@ class PdfView(QMainWindow):
         self.add_text.deleteLater()
         self.add_text = None
         self.rerender_page(page_index)
-
 
 
 
