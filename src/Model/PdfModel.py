@@ -107,7 +107,6 @@ class PdfModel:
                     g = (color_int >> 8) & 255
                     b = color_int & 255
                     qcolor = QColor(r, g, b)
-                    print(j['size'])
                     result.append([j['size'], j['font'], qcolor, j['text'], j['bbox']])
         return result
 

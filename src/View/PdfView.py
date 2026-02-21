@@ -5,8 +5,10 @@ from PySide6.QtCore import Qt, QTimer
 
 from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.EditTextQLabel import EditTextQLabel
+from src.View.PageManager import PageManager
 from src.View.PageQLabel import PageQLabel
 from src.View.TextData import TextData
+from src.View.TextTool import TextTool
 from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
 class PdfView(QMainWindow):
@@ -18,14 +20,24 @@ class PdfView(QMainWindow):
         self.current_color = None
         self.add_text = None
         self.viewmodel = viewmodel
-
+        self.pages_QWidget = []
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.page_manager = PageManager(
+            self.viewmodel,
+            self.ui.scrollArea,
+            self.ui.page_scroll,
+            self.pages_QWidget,
+            self.page_clicked
+        )
+        self.text_tool = TextTool(
+            self.viewmodel,
+            self.pages_QWidget,
+            self.page_manager
+        )
         self.setup_toolbar()
         self.ui.toolBar_2.hide()
-
-
 
         self.mode_group = QActionGroup(self)
         self.mode_group.addAction(self.ui.actionView)
@@ -36,7 +48,9 @@ class PdfView(QMainWindow):
         self.ui.actionAdd_Text.setChecked(True)
         self.viewmodel.set_mode(EditorMode.ADD_TEXT)
 
+        self.setup_connections()
 
+    def setup_connections(self):
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
         self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
@@ -48,8 +62,6 @@ class PdfView(QMainWindow):
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
         self.ui.save_btn.clicked.connect(self._save_file)
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
-
-        self.pages_QWidget = []
 
     def setup_toolbar(self):
         toolbar = self.ui.toolBar_2
@@ -78,68 +90,70 @@ class PdfView(QMainWindow):
         self.font_choose.currentTextChanged.connect(self.change_font)
         self.size_choose.valueChanged.connect(self.change_size)
 
+    def _prev_page(self):
+        self.viewmodel.prev_page()
+        self.page_manager.scroll_to(self.viewmodel.current_page)
+
+    def _next_page(self):
+        self.viewmodel.next_page()
+        self.page_manager.scroll_to(self.viewmodel.current_page)
+
+
+    def _selector_pressed(self):
+        num = min(int(self.ui.page_selector.text()),self.viewmodel.get_total())
+        self.viewmodel.set_current_page_number(num) # page number for human
+        while len(self.pages_QWidget) < num:
+            self.page_manager.load_group()
+        self.ui.scrollArea.widget().layout().activate()
+        QTimer.singleShot(0, lambda: self.page_manager.scroll_to(self.viewmodel.current_page))
+
+    def set_selector(self):
+        self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
+
+
+    def _save_file(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")
+        if file_path != "":
+            self.viewmodel.save_file(file_path)
+
+    def _open_file(self):
+        file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
+        if file_path != "":
+            self.viewmodel.open_file(file_path)
+            self.ui.total.setText(f"/{self.viewmodel.get_total()}")
+            self.page_manager.load_group()
+
+
+    def _scrolled(self):
+        # 1 page ≈ 850
+        #print(self.ui.scrollArea.verticalScrollBar().sliderPosition(), self.ui.scrollArea.verticalScrollBar().maximum())
+        # print(self.ui.page_scroll.count())
+
+        max_height = self.ui.scrollArea.verticalScrollBar().maximum()
+        cur_height = self.ui.scrollArea.verticalScrollBar().value()
+        #print(max_height,cur_height)
+        if ((max_height - cur_height < 850*4) and self.ui.page_scroll.count() < self.viewmodel.get_total()):
+            self.page_manager.load_group()
+        self.viewmodel.set_current_page_number(self.page_manager.calculate_page()+1)#page number "for pc"
 
     def change_font(self, text):
-        font_map = {
-            "Helvetica": "helv",
-            "Times New Roman": "tiro",
-            "Courier New": "cour"
-        }
-        font = font_map[text]
+        font = self.viewmodel.font_pyside6_to_pymupdf(text)
         self.viewmodel.set_current_font(font)
-        self.add_text.apply_change(
-            self.viewmodel.current_font,
-            self.viewmodel.current_fontsize,
-            self.viewmodel.current_color
-        )
+        if self.add_text != None:
+            self.add_text.apply_change(
+                self.viewmodel.current_font,
+                self.viewmodel.current_fontsize,
+                self.viewmodel.current_color
+            )
 
     def change_size(self, value):
         self.viewmodel.set_current_size(value)
-        self.add_text.apply_change(
-            self.viewmodel.current_font,
-            self.viewmodel.current_fontsize,
-            self.viewmodel.current_color
-        )
-
-
-    def update_color_action_icon(self):
-        pixmap = QPixmap(16, 16)
-        pixmap.fill(self.current_color)
-        self.ui.color_choose.setIcon(QIcon(pixmap))
-
-    def mode_changed(self,mode):
-        self.update_toolbar_visibility(mode)
-        if mode == EditorMode.EDIT_TEXT:
-            self.prepare_edit_mode()
-
-    def prepare_edit_mode(self):
-        label = self.pages_QWidget[self.viewmodel.current_page]
-        pixmap = label.pixmap()
-        padding = 5
-        spans = self.viewmodel.get_spans_i(self.viewmodel.current_page)
-        for size,font,color,text,bbox in spans:
-            text_data = TextData(text,font,size,color)
-            x = int(bbox[0])
-            y = int(bbox[1])
-            width = int(bbox[2] - bbox[0])
-            height = int(bbox[3] - bbox[1])
-            edit_text = EditTextQLabel(text_data, width + padding, height + padding,bbox, label)
-            x_offset = label.width() / 2 - pixmap.width() / 2
-            edit_text.move(x + x_offset - padding, y)
-            edit_text.coords.connect(self.move_text)
-
-    def move_text(self,x,y,bbox):
-        sender_widget = self.sender()
-        text_data = sender_widget.text_data
-        label = sender_widget.parent()
-        pixmap = label.pixmap()
-        x_offset = label.width() / 2 - pixmap.width() / 2
-        y_offset = sender_widget.height() * 0.66
-        self.viewmodel.move_text(x - x_offset, y + y_offset, text_data, bbox)
-        self.rerender_page(self.viewmodel.current_page)
-        new_bbox = (sender_widget.x()-x_offset, sender_widget.y(), sender_widget.x()-x_offset+sender_widget.width(),sender_widget.y() + sender_widget.height())
-        sender_widget.bbox = new_bbox
-
+        if self.text_tool.add_text != None:
+            self.add_text.apply_change(
+                self.viewmodel.current_font,
+                self.viewmodel.current_fontsize,
+                self.viewmodel.current_color
+            )
 
     def update_toolbar_visibility(self, mode):
         if mode == EditorMode.VIEW:
@@ -147,6 +161,10 @@ class PdfView(QMainWindow):
         else:
             self.ui.toolBar_2.show()
 
+    def update_color_action_icon(self):
+        pixmap = QPixmap(16, 16)
+        pixmap.fill(self.current_color)
+        self.ui.color_choose.setIcon(QIcon(pixmap))
 
     def open_color_dialog(self):
         color = QColorDialog.getColor(initial=self.current_color)
@@ -160,144 +178,14 @@ class PdfView(QMainWindow):
                 self.viewmodel.current_color
             )
 
-    def _save_file(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")
-        if file_path != "":
-            self.viewmodel.save_file(file_path)
-
-    def _open_file(self):
-        file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
-        if file_path != "":
-            self.viewmodel.open_file(file_path)
-            self.ui.total.setText(f"/{self.viewmodel.get_total()}")
-            self.load_group()
-
-
-    def _scrolled(self):
-        # 1 page ≈ 850
-        #print(self.ui.scrollArea.verticalScrollBar().sliderPosition(), self.ui.scrollArea.verticalScrollBar().maximum())
-        # print(self.ui.page_scroll.count())
-
-        max_height = self.ui.scrollArea.verticalScrollBar().maximum()
-        cur_height = self.ui.scrollArea.verticalScrollBar().value()
-        #print(max_height,cur_height)
-        if ((max_height - cur_height < 850*4) and self.ui.page_scroll.count() < self.viewmodel.get_total()):
-            self.load_group()
-        self.viewmodel.set_current_page_number(self.calculate_page()+1)#page number "for pc"
-
-
-    def load_group(self):
-        layout = self.ui.page_scroll
-        pages = self.viewmodel.get_next_pages(5)
-        start_index = len(self.pages_QWidget)
-        for index, i in enumerate(pages):
-            image = i
-            pixmap = QPixmap.fromImage(image)
-            page_label = PageQLabel(pixmap,index + start_index)
-            #page_label.setAlignment(Qt.AlignCenter)
-            #page_label.setPixmap(pixmap)
-            page_label.coords.connect(self.page_clicked)
-            layout.addWidget(page_label)
-            self.pages_QWidget.append(page_label)
-
-    def rerender_page(self, page_index):
-        new = self.viewmodel.get_page_i(page_index)
-        self.pages_QWidget[page_index].setPixmap(QPixmap.fromImage(new))
+    def mode_changed(self,mode):
+        self.update_toolbar_visibility(mode)
+        if mode == EditorMode.EDIT_TEXT:
+            self.text_tool.prepare_edit_mode(self.viewmodel.current_page)
 
     def page_clicked(self, x, y, page_index):
         if self.viewmodel.mode == EditorMode.VIEW:
             return
 
         if self.viewmodel.mode == EditorMode.ADD_TEXT:
-            self.add_text_func(x, y, page_index)
-        elif self.viewmodel.mode == EditorMode.EDIT_TEXT:
-            self.edit_text_func(x,y, page_index)
-
-    def edit_text_func(self, x, y, page_index):
-        pass
-
-
-    def add_text_func(self, x, y, page_index):
-        label = self.pages_QWidget[page_index]
-        pixmap = label.pixmap()
-        x_offset = label.width() / 2 - pixmap.width() / 2
-        if self.add_text != None:
-            self.add_text.deleteLater()
-            self.add_text = None
-
-        self.add_text = DraggableLineEdit(label)
-        self.add_text.move(x + x_offset, y-self.add_text.height()/2)
-        self.add_text.show()
-        self.add_text.setFocus()
-        self.add_text.returnPressed.connect(
-            lambda: self.save_text(x, y, page_index))
-        # without offset because pymupdf works with the coordinates of the file
-        self.add_text.apply_change(
-            self.viewmodel.current_font,
-            self.viewmodel.current_fontsize,
-            self.viewmodel.current_color
-        )
-
-
-    def save_text(self, x, y, page_index):
-        text = self.add_text.text()
-        if text != "":
-            label = self.pages_QWidget[page_index]
-            pixmap = label.pixmap()
-            x_offset = label.width() / 2 - pixmap.width() / 2
-            x = self.add_text.x() - x_offset
-            y = self.add_text.y() + self.add_text.height()
-            self.viewmodel.add_text(text, x, y, page_index)
-        self.add_text.deleteLater()
-        self.add_text = None
-        self.rerender_page(page_index)
-
-
-
-    def scroll_to(self, num):
-        self.ui.scrollArea.ensureWidgetVisible(self.pages_QWidget[num])
-
-
-
-    def _prev_page(self):
-        self.viewmodel.prev_page()
-        self.scroll_to(self.viewmodel.current_page)
-
-    def _next_page(self):
-        self.viewmodel.next_page()
-        self.scroll_to(self.viewmodel.current_page)
-
-
-    def _selector_pressed(self):
-        num = min(int(self.ui.page_selector.text()),self.viewmodel.get_total())
-        self.viewmodel.set_current_page_number(num) # page number for human
-        while len(self.pages_QWidget) < num:
-            self.load_group()
-        self.ui.scrollArea.widget().layout().activate()
-        QTimer.singleShot(0, lambda: self.scroll_to(self.viewmodel.current_page))
-
-
-    def calculate_page(self):
-        cur_height = self.ui.scrollArea.verticalScrollBar().value()
-        left = 0
-        right = len(self.pages_QWidget)-1
-        while left <= right: #binary search
-            mid = (left+right)//2
-
-            if self.pages_QWidget[mid].y()< cur_height:
-                left = mid+1
-            else:
-                right = mid-1
-        distance_left = abs(self.pages_QWidget[left].y() - cur_height)
-        distance_right = abs(self.pages_QWidget[right].y() - cur_height)
-        if (distance_right < distance_left):
-            return right
-        else:
-            return left
-
-
-    def set_selector(self):
-        self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
-
-
-
+            self.text_tool.add_text_func(x, y, page_index)

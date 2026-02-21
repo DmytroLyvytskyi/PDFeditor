@@ -7,7 +7,7 @@ from src.View.DraggableLineEdit import DraggableLineEdit
 
 class EditTextQLabel(QLabel):
     coords = Signal(int, int, tuple) # x,y
-    def __init__(self,text_data,width,height,bbox, parent=None):
+    def __init__(self,text_data,width,height,bbox,viewmodel, parent=None):
         super().__init__(parent)
         self.drag = False
         self.edit_text = None
@@ -15,6 +15,7 @@ class EditTextQLabel(QLabel):
         self.text_data = text_data
         self.setFixedSize(width, height)
         self.bbox = bbox
+        self.viewmodel = viewmodel
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
         self.show()
 
@@ -45,19 +46,14 @@ class EditTextQLabel(QLabel):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             label = self.parent()
-            self.edit_text = DraggableLineEdit(label)
+            self.edit_text = DraggableLineEdit(self.viewmodel,label)
             self.edit_text.move(self.x(), self.y())
             self.hide()
             self.edit_text.show()
             self.edit_text.setFocus()
             self.edit_text.setText(self.text_data.text)
-            font_map = {
-                "Helvetica": "helv",
-                "Times New Roman": "tiro",
-                "Courier New": "cour"
-            }
             self.edit_text.apply_change(
-                font_map[self.text_data.font],
+                self.viewmodel.font_pyside6_to_pymupdf(self.text_data.font),
                 self.text_data.size,
                 self.text_data.color
             )
@@ -73,12 +69,7 @@ class EditTextQLabel(QLabel):
         self.show()
 
     def update_visual_size(self):
-        font_map = {
-            "helv": "Helvetica",
-            "tiro": "Times New Roman",
-            "cour": "Courier New"
-        }
-        qt_font = QFont(font_map.get(self.text_data.font, "Helvetica"), self.text_data.size)
+        qt_font = QFont(self.text_data.font, self.text_data.size)
         metrics = QFontMetrics(qt_font)
 
         width = metrics.horizontalAdvance(self.text_data.text)

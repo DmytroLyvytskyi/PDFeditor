@@ -5,10 +5,11 @@ from PySide6.QtWidgets import QWidget, QLineEdit
 
 class DraggableLineEdit(QLineEdit):
 
-    def __init__(self, parent=None):
+    def __init__(self,viewmodel, parent=None):
         super().__init__(parent)
         self.drag = False
         self.offset = QPoint(0, 0)
+        self.viewmodel = viewmodel
         self.textChanged.connect(self.adjust_size)
 
     def mousePressEvent(self, event):
@@ -39,12 +40,7 @@ class DraggableLineEdit(QLineEdit):
         super().mouseReleaseEvent(event)
 
     def apply_change(self,font, fontsize, color):
-        font_map = {
-            "helv": "Helvetica",
-            "tiro": "Times New Roman",
-            "cour": "Courier New"
-        }
-        qt_font = QFont(font_map[font],fontsize)
+        qt_font = QFont(self.viewmodel.font_pymupdf_to_pyside6(font),fontsize)
         self.setFont(qt_font)
         self.setStyleSheet(
             f"color: rgb({color.red()}, {color.green()}, {color.blue()});"

@@ -25,6 +25,23 @@ class PdfViewModel(QObject):
         return self.Model.get_spans_i(page_index)
 
 
+    def font_pymupdf_to_pyside6(self, font_pymupdf):
+        font_map = {
+            "helv": "Helvetica",
+            "tiro": "Times New Roman",
+            "cour": "Courier New"
+        }
+        return font_map[font_pymupdf]
+
+    def font_pyside6_to_pymupdf(self, font_pyside6):
+        font_map = {
+            "Helvetica": "helv",
+            "Times New Roman": "tiro",
+            "Courier New": "cour"
+        }
+        return font_map[font_pyside6]
+
+
     def save_file(self, path):
         self.Model.save_file(path)
 
