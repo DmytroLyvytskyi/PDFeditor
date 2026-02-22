@@ -18,7 +18,6 @@ class PdfView(QMainWindow):
         self.size_choose = None
         self.font_choose = None
         self.current_color = None
-        self.add_text = None
         self.viewmodel = viewmodel
         self.pages_QWidget = []
 
@@ -139,8 +138,8 @@ class PdfView(QMainWindow):
     def change_font(self, text):
         font = self.viewmodel.font_pyside6_to_pymupdf(text)
         self.viewmodel.set_current_font(font)
-        if self.add_text != None:
-            self.add_text.apply_change(
+        if self.text_tool.add_text != None:
+            self.text_tool.add_text.apply_change(
                 self.viewmodel.current_font,
                 self.viewmodel.current_fontsize,
                 self.viewmodel.current_color
@@ -149,7 +148,7 @@ class PdfView(QMainWindow):
     def change_size(self, value):
         self.viewmodel.set_current_size(value)
         if self.text_tool.add_text != None:
-            self.add_text.apply_change(
+            self.text_tool.add_text.apply_change(
                 self.viewmodel.current_font,
                 self.viewmodel.current_fontsize,
                 self.viewmodel.current_color
@@ -172,7 +171,7 @@ class PdfView(QMainWindow):
             self.current_color = color
             self.update_color_action_icon()
             self.viewmodel.set_current_color(self.current_color)
-            self.add_text.apply_change(
+            self.text_tool.add_text.apply_change(
                 self.viewmodel.current_font,
                 self.viewmodel.current_fontsize,
                 self.viewmodel.current_color
