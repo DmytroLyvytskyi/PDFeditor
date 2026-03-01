@@ -1,6 +1,6 @@
 from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction, QPen, QFont
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
-    QLineEdit, QComboBox, QSpinBox, QColorDialog
+    QLineEdit, QComboBox, QSpinBox, QColorDialog, QToolButton, QMenu, QApplication
 from PySide6.QtCore import Qt, QTimer
 
 from src.View.DraggableLineEdit import DraggableLineEdit
@@ -28,7 +28,8 @@ class PdfView(QMainWindow):
             self.ui.scrollArea,
             self.ui.page_scroll,
             self.pages_QWidget,
-            self.page_clicked
+            self.page_clicked,
+            self._on_pages_loaded
         )
         self.text_tool = TextTool(
             self.viewmodel,
@@ -44,10 +45,32 @@ class PdfView(QMainWindow):
         self.mode_group.addAction(self.ui.actionEdit_Text)
         self.mode_group.setExclusive(True)
 
-        self.ui.actionAdd_Text.setChecked(True)
-        self.viewmodel.set_mode(EditorMode.ADD_TEXT)
+        self.ui.actionView.setChecked(True)
+        self.viewmodel.set_mode(EditorMode.VIEW)
 
         self.setup_connections()
+        self.setup_file_menu()
+
+    def setup_file_menu(self):
+        self.file_btn = QToolButton(self.ui.toolBar)
+        self.file_btn.setText("File")
+        self.file_btn.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self.file_btn.setStyleSheet("""
+            QToolButton::menu-indicator {
+                image: none;
+            }
+            QToolButton:hover {
+                background-color: rgba(0, 0, 0, 20);
+            }
+        """)
+        self.file_menu = QMenu(self.file_btn)
+        self.file_menu.addAction("Open PDF...", self._open_file)
+        self.file_menu.addAction("Save", self._save_file)
+        self.file_menu.addAction("Save As...", self._save_file_as)
+        self.file_btn.setMenu(self.file_menu)
+        self.ui.toolBar.insertWidget(self.ui.actionView, self.file_btn)
+        self.ui.toolBar.insertSeparator(self.ui.actionView)
+
 
     def setup_connections(self):
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
@@ -55,11 +78,9 @@ class PdfView(QMainWindow):
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
         self.viewmodel.page_number_changed.connect(self.set_selector)
         self.viewmodel.mode_changed.connect(self.mode_changed)
-        self.ui.open_btn.clicked.connect(self._open_file)
         self.ui.prev_btn.clicked.connect(self._prev_page)
         self.ui.next_btn.clicked.connect(self._next_page)
         self.ui.page_selector.returnPressed.connect(self._selector_pressed)
-        self.ui.save_btn.clicked.connect(self._save_file)
         self.ui.scrollArea.verticalScrollBar().valueChanged.connect(self._scrolled)
 
     def setup_toolbar(self):
@@ -89,6 +110,17 @@ class PdfView(QMainWindow):
         self.font_choose.currentTextChanged.connect(self.change_font)
         self.size_choose.valueChanged.connect(self.change_size)
 
+    def _on_pages_loaded(self, start: int, end: int):
+        if self.viewmodel.mode == EditorMode.EDIT_TEXT:
+            QTimer.singleShot(0, lambda: self._apply_edit_labels(start, end))
+
+    def _apply_edit_labels(self, start: int, end: int):
+        self.ui.scrollArea.widget().layout().activate()
+        QApplication.processEvents()
+        for i in range(start, end):
+            self.text_tool.prepare_edit_mode_i(i)
+
+
     def _prev_page(self):
         self.viewmodel.prev_page()
         self.page_manager.scroll_to(self.viewmodel.current_page)
@@ -109,18 +141,29 @@ class PdfView(QMainWindow):
     def set_selector(self):
         self.ui.page_selector.setText(str(self.viewmodel.get_current_page_number()))
 
-
     def _save_file(self):
-        file_path, _ = QFileDialog.getSaveFileName(self, "Save", "", "Pdf Files (*.pdf)")
+        if self.viewmodel.current_path:
+            override = self.text_tool.get_override_spans_for_save()
+            self.viewmodel.save_file(self.viewmodel.current_path, override)
+
+    def _save_file_as(self):
+        file_path, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Pdf Files (*.pdf)")
         if file_path != "":
-            self.viewmodel.save_file(file_path)
+            override = self.text_tool.get_override_spans_for_save()
+            self.viewmodel.save_file_as(file_path, override)
+
 
     def _open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
         if file_path != "":
+            self.text_tool.clear()
+            self.page_manager.clear_pages()
             self.viewmodel.open_file(file_path)
             self.ui.total.setText(f"/{self.viewmodel.get_total()}")
+            self.ui.page_selector.setText("1")
             self.page_manager.load_group()
+            self.ui.actionView.setChecked(True)
+            self.viewmodel.set_mode(EditorMode.VIEW)
 
 
     def _scrolled(self):
@@ -180,7 +223,9 @@ class PdfView(QMainWindow):
     def mode_changed(self,mode):
         self.update_toolbar_visibility(mode)
         if mode == EditorMode.EDIT_TEXT:
-            self.text_tool.prepare_edit_mode(self.viewmodel.current_page)
+            self.text_tool.prepare_edit_mode()
+        else:
+            self.text_tool.clear_edit_labels()
 
     def page_clicked(self, x, y, page_index):
         if self.viewmodel.mode == EditorMode.VIEW:

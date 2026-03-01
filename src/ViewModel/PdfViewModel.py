@@ -18,6 +18,7 @@ class PdfViewModel(QObject):
         self.current_font = "helv"
         self.current_fontsize = 12
         self.current_color = QColor(0, 0, 0)
+        self.current_path = None
 
 
 
@@ -37,13 +38,18 @@ class PdfViewModel(QObject):
         font_map = {
             "Helvetica": "helv",
             "Times New Roman": "tiro",
-            "Courier New": "cour"
+            "Courier New": "cour",
+            "Courier": "cour"
         }
         return font_map[font_pyside6]
 
 
-    def save_file(self, path):
-        self.Model.save_file(path)
+    def save_file(self, path, override_spans_pages=None):
+        self.Model.save_file(path, override_spans_pages)
+
+    def save_file_as(self, path, override_spans_pages=None):
+        self.current_path = path
+        self.Model.save_file(path, override_spans_pages)
 
     def set_current_font(self, font_name):
         self.current_font = font_name
@@ -60,11 +66,11 @@ class PdfViewModel(QObject):
         self.mode_changed.emit(mode)
 
     def open_file(self, path):
+        self.current_path = path
         self.Model.open_file(path)
         self.current_page = 0
-
-    def move_text(self,x,y,text_data,bbox):
-        self.Model.move_text(x,y,text_data,bbox,self.current_page)
+        self.loaded_count = 0
+        self.page_number_changed.emit()
 
     def next_page(self):
         if (self.current_page + 1) < self.Model.total:
@@ -84,8 +90,8 @@ class PdfViewModel(QObject):
         self.current_page = page - 1
         self.page_number_changed.emit()
 
-    def get_page_i(self, i):
-        pix = self.Model.render_page(i)
+    def get_page_i(self, i, override_spans=None):
+        pix = self.Model.render_page(i, override_spans)
         image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         return image
 

@@ -38,6 +38,12 @@ class Ui_MainWindow(object):
         self.actionEdit_Text.setObjectName(u"actionEdit_Text")
         self.actionEdit_Text.setCheckable(True)
         self.actionEdit_Text.setMenuRole(QAction.MenuRole.NoRole)
+        self.actionOpen = QAction(MainWindow)
+        self.actionOpen.setObjectName(u"actionOpen")
+        self.actionSave = QAction(MainWindow)
+        self.actionSave.setObjectName(u"actionSave")
+        self.actionSaveAs = QAction(MainWindow)
+        self.actionSaveAs.setObjectName(u"actionSaveAs")
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.verticalLayout = QVBoxLayout(self.centralwidget)
@@ -84,22 +90,12 @@ class Ui_MainWindow(object):
         self.scrollArea.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self.scrollAreaWidgetContents_5 = QWidget()
         self.scrollAreaWidgetContents_5.setObjectName(u"scrollAreaWidgetContents_5")
-        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 596))
+        self.scrollAreaWidgetContents_5.setGeometry(QRect(0, 0, 975, 660))
         self.page_scroll = QVBoxLayout(self.scrollAreaWidgetContents_5)
         self.page_scroll.setObjectName(u"page_scroll")
         self.scrollArea.setWidget(self.scrollAreaWidgetContents_5)
 
         self.verticalLayout.addWidget(self.scrollArea)
-
-        self.open_btn = QPushButton(self.centralwidget)
-        self.open_btn.setObjectName(u"open_btn")
-
-        self.verticalLayout.addWidget(self.open_btn)
-
-        self.save_btn = QPushButton(self.centralwidget)
-        self.save_btn.setObjectName(u"save_btn")
-
-        self.verticalLayout.addWidget(self.save_btn)
 
         MainWindow.setCentralWidget(self.centralwidget)
         self.menubar = QMenuBar(MainWindow)
@@ -131,11 +127,12 @@ class Ui_MainWindow(object):
         self.actionView.setText(QCoreApplication.translate("MainWindow", u"View", None))
         self.actionAdd_Text.setText(QCoreApplication.translate("MainWindow", u"Add Text", None))
         self.actionEdit_Text.setText(QCoreApplication.translate("MainWindow", u"Edit Text", None))
+        self.actionOpen.setText(QCoreApplication.translate("MainWindow", u"Open PDF", None))
+        self.actionSave.setText(QCoreApplication.translate("MainWindow", u"Save", None))
+        self.actionSaveAs.setText(QCoreApplication.translate("MainWindow", u"Save As...", None))
         self.prev_btn.setText(QCoreApplication.translate("MainWindow", u"<-", None))
         self.total.setText(QCoreApplication.translate("MainWindow", u"/", None))
         self.next_btn.setText(QCoreApplication.translate("MainWindow", u"->", None))
-        self.open_btn.setText(QCoreApplication.translate("MainWindow", u"Open Pdf", None))
-        self.save_btn.setText(QCoreApplication.translate("MainWindow", u"Save", None))
         self.toolBar.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar", None))
         self.toolBar_2.setWindowTitle(QCoreApplication.translate("MainWindow", u"toolBar_2", None))
     # retranslateUi

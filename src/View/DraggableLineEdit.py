@@ -10,6 +10,7 @@ class DraggableLineEdit(QLineEdit):
         self.drag = False
         self.offset = QPoint(0, 0)
         self.viewmodel = viewmodel
+        self.scale_y = 1.0
         self.textChanged.connect(self.adjust_size)
 
     def mousePressEvent(self, event):
@@ -40,7 +41,8 @@ class DraggableLineEdit(QLineEdit):
         super().mouseReleaseEvent(event)
 
     def apply_change(self,font, fontsize, color):
-        qt_font = QFont(self.viewmodel.font_pymupdf_to_pyside6(font),fontsize)
+        qt_font = QFont(self.viewmodel.font_pymupdf_to_pyside6(font))
+        qt_font.setPixelSize(int(fontsize * self.scale_y))
         self.setFont(qt_font)
         self.setStyleSheet(
             f"color: rgb({color.red()}, {color.green()}, {color.blue()});"

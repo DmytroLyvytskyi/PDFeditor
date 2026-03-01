@@ -8,17 +8,38 @@ class PdfModel:
         self.total = None
 
     def open_file(self, path):
+        if self.file != None:
+            self.file.close()
+            self.file = None
+            self.total = None
         self.file = pymupdf.open(path)
         self.total = len(self.file)
 
-    def render_page(self, num):
+    def _full_redraw(self, page, override_spans):
+        blocks = page.get_text("dict")["blocks"]
+        for block in blocks:
+            if 'lines' in block:
+                page.add_redact_annot(block['bbox'])
+        page.apply_redactions()
+
+        for x, y, text, font, fontsize, pdf_color in override_spans:
+            if text.strip():
+                page.insert_text((x, y), text, fontsize=fontsize, fontname=font, color=pdf_color)
+
+    def render_page(self, num, override_spans=None):
         page = self.file[num]
+        if override_spans is not None:
+            self._full_redraw(page, override_spans)
         return page.get_pixmap()
 
-
-    def save_file(self, path):
-        self.file.save(path)
-
+    def save_file(self, path, override_spans_pages=None):
+        if override_spans_pages:
+            for page_index, spans in override_spans_pages.items():
+                self._full_redraw(self.file[page_index], spans)
+        try:
+            self.file.save(path, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+        except Exception:
+            self.file.save(path, garbage=4, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
 
     def add_text(self, text, x, y, page_index, font, fontsize, color:QColor):
         """
@@ -37,8 +58,6 @@ class PdfModel:
             None
         """
         page = self.file[page_index]
-        if fontsize<17:
-            y = y - fontsize / 2
         pdf_color = (color.red() / 255.0,color.green() / 255.0,color.blue() / 255.0)
         page.insert_text((x,y), text, fontsize = fontsize, fontname = font, color = pdf_color)
 
@@ -100,6 +119,8 @@ class PdfModel:
         blocks = self.get_text_blocks_i(page_index)
         result = []
         for block in blocks:
+            if 'lines' not in block:
+                continue
             for i in block['lines']:
                 for j in i['spans']:
                     color_int = j['color']
@@ -107,26 +128,7 @@ class PdfModel:
                     g = (color_int >> 8) & 255
                     b = color_int & 255
                     qcolor = QColor(r, g, b)
-                    result.append([j['size'], j['font'], qcolor, j['text'], j['bbox']])
+                    result.append([j['size'], j['font'], qcolor, j['text'], j['bbox'], j['origin']])
         return result
-
-    def move_text(self,x,y,text_data,bbox,page_index):
-        """
-        Moves text in PDF
-
-        Args:
-            x (int): x position
-            y (int): y position
-            text_data (TextData): text data
-            bbox (tuple): bbox
-            page_index (int): index of page
-
-        Returns:
-            None
-        """
-        page = self.file[page_index]
-        page.add_redact_annot(bbox)
-        page.apply_redactions()
-        self.add_text(text_data.text, x, y, page_index, text_data.font, text_data.size, text_data.color)
 
 

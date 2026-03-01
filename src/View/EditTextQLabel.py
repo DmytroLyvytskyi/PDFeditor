@@ -7,6 +7,7 @@ from src.View.DraggableLineEdit import DraggableLineEdit
 
 class EditTextQLabel(QLabel):
     coords = Signal(int, int, tuple) # x,y
+    selected = Signal(object)
     def __init__(self,text_data,width,height,bbox,viewmodel, parent=None):
         super().__init__(parent)
         self.drag = False
@@ -16,6 +17,8 @@ class EditTextQLabel(QLabel):
         self.setFixedSize(width, height)
         self.bbox = bbox
         self.viewmodel = viewmodel
+        self.scale_x = 1.0
+        self.scale_y = 1.0
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
         self.show()
 
@@ -24,6 +27,7 @@ class EditTextQLabel(QLabel):
             self.drag = True
             self.offset = event.pos() # event.pos -> position relative to the widget that was clicked
             self.setStyleSheet("border: 2px solid gray; background-color: rgba(137, 207, 240, 100);")
+            self.selected.emit(self)
             super().mousePressEvent(event)
         else:
             super().mousePressEvent(event)
@@ -60,19 +64,27 @@ class EditTextQLabel(QLabel):
             self.edit_text.returnPressed.connect(self.finished)
         super().mouseDoubleClickEvent(event)
 
+    def apply_change(self, font, fontsize, color):
+        self.text_data.font = font
+        self.text_data.size = fontsize
+        self.text_data.color = color
+        self.update_visual_size()
+        self.coords.emit(self.x(), self.y(), self.bbox)
+
     def finished(self):
         new_text = self.edit_text.text()
         self.text_data.text = new_text
         self.update_visual_size()
+        self.drag = False
+        self.setStyleSheet("border: 2px solid gray; background: transparent;")
         self.coords.emit(self.x(), self.y(), self.bbox)
         self.edit_text.deleteLater()
         self.show()
 
     def update_visual_size(self):
-        qt_font = QFont(self.text_data.font, self.text_data.size)
-        metrics = QFontMetrics(qt_font)
-
-        width = metrics.horizontalAdvance(self.text_data.text)
-        height = metrics.height()
         padding = 5
-        self.setFixedSize(width + padding, height + padding)
+        size = self.text_data.size
+        metrics = QFontMetrics(QFont(self.text_data.font, int(size)))
+        width = int(metrics.horizontalAdvance(self.text_data.text) * self.scale_x)
+        height = int(size * 1.3 * self.scale_y) + padding
+        self.setFixedSize(width + 2 * padding, height + padding)
