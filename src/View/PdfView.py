@@ -96,7 +96,7 @@ class PdfView(QMainWindow):
 
         toolbar.addWidget(QLabel("Font: "))
         self.font_choose = QComboBox()
-        self.font_choose.addItems(["Helvetica", "Times New Roman", "Courier New"]) # add detection of fonts used in pdf !!
+        self.font_choose.addItems(["Helvetica", "Times New Roman", "Courier New"])
         self.font_choose.setFixedWidth(150)
         toolbar.addWidget(self.font_choose)
 
@@ -162,9 +162,17 @@ class PdfView(QMainWindow):
             self.ui.total.setText(f"/{self.viewmodel.get_total()}")
             self.ui.page_selector.setText("1")
             self.page_manager.load_group()
+            self._update_font_list()
             self.ui.actionView.setChecked(True)
             self.viewmodel.set_mode(EditorMode.VIEW)
 
+    def _update_font_list(self):
+        self.font_choose.blockSignals(True)
+        self.font_choose.clear()
+        self.font_choose.addItems(["Helvetica", "Times New Roman", "Courier New"])
+        for display_name, xref in self.viewmodel.get_pdf_fonts():
+            self.font_choose.addItem(display_name, xref)
+        self.font_choose.blockSignals(False)
 
     def _scrolled(self):
         # 1 page ≈ 850
@@ -179,14 +187,24 @@ class PdfView(QMainWindow):
         self.viewmodel.set_current_page_number(self.page_manager.calculate_page()+1)#page number "for pc"
 
     def change_font(self, text):
-        font = self.viewmodel.font_pyside6_to_pymupdf(text)
-        self.viewmodel.set_current_font(font)
+        xref = self.font_choose.currentData()
+        if xref is not None:
+            self.viewmodel.set_current_font(text)
+            self.viewmodel.current_font_xref = xref
+        else:
+            font = self.viewmodel.font_pyside6_to_pymupdf(text)
+            self.viewmodel.set_current_font(font)
+            self.viewmodel.current_font_xref = 0
         if self.text_tool.add_text != None:
-            self.text_tool.add_text.apply_change(
-                self.viewmodel.current_font,
-                self.viewmodel.current_fontsize,
-                self.viewmodel.current_color
-            )
+            self.text_tool.add_text.xref = self.viewmodel.current_font_xref
+            try:
+                self.text_tool.add_text.apply_change(
+                    self.viewmodel.current_font,
+                    self.viewmodel.current_fontsize,
+                    self.viewmodel.current_color
+                )
+            except RuntimeError:
+                self.text_tool.add_text = None
 
     def change_size(self, value):
         self.viewmodel.set_current_size(value)

@@ -19,12 +19,18 @@ class PdfViewModel(QObject):
         self.current_fontsize = 12
         self.current_color = QColor(0, 0, 0)
         self.current_path = None
+        self.current_font_xref = 0
 
 
 
     def get_spans_i(self, page_index):
         return self.Model.get_spans_i(page_index)
 
+    def get_pdf_fonts(self):
+        result = []
+        for xref, data in self.Model.font_cache.items():
+            result.append((data['name'], xref))
+        return result
 
     def font_pymupdf_to_pyside6(self, font_pymupdf):
         font_map = {
@@ -43,6 +49,13 @@ class PdfViewModel(QObject):
         }
         return font_map[font_pyside6]
 
+    def is_char_valid(self, xref, char):
+        if xref == 0:
+            return True
+        data = self.Model.font_cache.get(xref)
+        if data is None:
+            return True
+        return ord(char) in data['codepoints']
 
     def save_file(self, path, override_spans_pages=None):
         self.Model.save_file(path, override_spans_pages)
@@ -108,8 +121,7 @@ class PdfViewModel(QObject):
             self.loaded_count+=1
         return result
 
-
-    def add_text(self, text, x, y, page_index):
-        self.Model.add_text(text, x, y, page_index, self.current_font, self.current_fontsize, self.current_color)
+    def add_text(self, text, x, y, page_index, xref=0):
+        self.Model.add_text(text, x, y, page_index, self.current_font, self.current_fontsize, self.current_color, xref)
 
 

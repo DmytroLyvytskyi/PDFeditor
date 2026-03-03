@@ -24,11 +24,15 @@ class TextTool:
         label = self.pages_QWidget[page_index]
         x_offset = calculate_x_offset(label)
         if self.add_text != None:
-            self.add_text.deleteLater()
+            try:
+                self.add_text.deleteLater()
+            except RuntimeError:
+                pass
             self.add_text = None
         scale_x, scale_y = self._get_scale(page_index, label)
         self.add_text = DraggableLineEdit(self.viewmodel, label)
         self.add_text.scale_y = scale_y
+        self.add_text.xref = self.viewmodel.current_font_xref
         self.add_text.move(x + x_offset, y - self.add_text.height() / 2)
         self.add_text.show()
         self.add_text.setFocus()
@@ -64,7 +68,7 @@ class TextTool:
             pdf_y = text_data.origin[1] + delta_y / scale_y
             color = text_data.color
             pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
-            result.append((pdf_x, pdf_y, text_data.text, text_data.font, text_data.size, pdf_color))
+            result.append((pdf_x, pdf_y, text_data.text, text_data.font,text_data.size, pdf_color, text_data.xref))
         return result
 
     def save_text(self, x, y, page_index):
@@ -77,7 +81,7 @@ class TextTool:
             frame = self.add_text.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth)
             pdf_x = (self.add_text.x() + frame - x_offset) / scale_x
             pdf_y = (self.add_text.y() + metrics.ascent() - frame) / scale_y
-            self.viewmodel.add_text(text, pdf_x, pdf_y, page_index)
+            self.viewmodel.add_text(text, pdf_x, pdf_y, page_index, self.add_text.xref)
         self.add_text.deleteLater()
         self.add_text = None
         self.page_manager.rerender_page(page_index)
@@ -114,8 +118,8 @@ class TextTool:
         x_offset = calculate_x_offset(label)
         page_labels = []
         scale_x, scale_y = self._get_scale(page_index, label)
-        for size,font,color,text,bbox,origin in spans:
-            text_data = TextData(text,font,size,color,origin)
+        for size, font, color, text, bbox, origin, xref in spans:
+            text_data = TextData(text, font, size, color, origin, xref)
             top = int((origin[1] - size) * scale_y)
             left = int(bbox[0] * scale_x)
             width = int((bbox[2] - bbox[0]) * scale_x)
@@ -124,7 +128,7 @@ class TextTool:
             edit_text.scale_x = scale_x
             edit_text.scale_y = scale_y
             edit_text.move(left + x_offset - padding, top)
-            edit_text.coords.connect(self.move_text)
+            edit_text.coords.connect(lambda x, y, bbox, pi=page_index: self.move_text(pi))
             edit_text.selected.connect(lambda l=edit_text: self._on_label_selected(l))
             page_labels.append(edit_text)
         self.edit_labels[page_index] = page_labels

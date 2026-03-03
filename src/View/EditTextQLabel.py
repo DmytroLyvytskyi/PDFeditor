@@ -1,3 +1,4 @@
+import pymupdf
 from PySide6.QtCore import QPoint, Qt, Signal
 from PySide6.QtGui import QFontMetrics, QFont
 from PySide6.QtWidgets import QLabel
@@ -50,14 +51,15 @@ class EditTextQLabel(QLabel):
     def mouseDoubleClickEvent(self, event):
         if event.button() == Qt.LeftButton:
             label = self.parent()
-            self.edit_text = DraggableLineEdit(self.viewmodel,label)
+            self.edit_text = DraggableLineEdit(self.viewmodel, label)
+            self.edit_text.xref = self.text_data.xref
             self.edit_text.move(self.x(), self.y())
             self.hide()
             self.edit_text.show()
             self.edit_text.setFocus()
             self.edit_text.setText(self.text_data.text)
             self.edit_text.apply_change(
-                self.viewmodel.font_pyside6_to_pymupdf(self.text_data.font),
+                self.text_data.font,
                 self.text_data.size,
                 self.text_data.color
             )
@@ -74,12 +76,22 @@ class EditTextQLabel(QLabel):
     def finished(self):
         new_text = self.edit_text.text()
         self.text_data.text = new_text
-        self.update_visual_size()
         self.drag = False
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
-        self.coords.emit(self.x(), self.y(), self.bbox)
+        padding = 5
+        data = self.viewmodel.Model.font_cache.get(self.text_data.xref)
+        if data is not None:
+            f = pymupdf.Font(fontbuffer=open(data['tmp_path'], 'rb').read())
+            width = int(f.text_length(new_text, fontsize=self.text_data.size) * self.scale_x)
+        else:
+            metrics = QFontMetrics(self.edit_text.font())
+            width = int(metrics.horizontalAdvance(new_text) * self.scale_x)
+        height = int(self.text_data.size * 1.3 * self.scale_y)
+        self.setFixedSize(width + 2 * padding, height + 2 * padding)
         self.edit_text.deleteLater()
+        self.edit_text = None
         self.show()
+        self.coords.emit(self.x(), self.y(), self.bbox)
 
     def update_visual_size(self):
         padding = 5
