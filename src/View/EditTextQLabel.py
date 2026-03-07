@@ -4,6 +4,7 @@ from PySide6.QtGui import QFontMetrics, QFont
 from PySide6.QtWidgets import QLabel
 
 from src.View.DraggableLineEdit import DraggableLineEdit
+from src.View.utils import resolve_font
 
 
 class EditTextQLabel(QLabel):
@@ -76,16 +77,16 @@ class EditTextQLabel(QLabel):
     def finished(self):
         new_text = self.edit_text.text()
         self.text_data.text = new_text
+        self.text_data.xref = self.edit_text.xref
         self.drag = False
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
         padding = 5
-        data = self.viewmodel.Model.font_cache.get(self.text_data.xref)
-        if data is not None:
-            f = pymupdf.Font(fontbuffer=open(data['tmp_path'], 'rb').read())
-            width = int(f.text_length(new_text, fontsize=self.text_data.size) * self.scale_x)
+        tmp_path, fontname = resolve_font(self.viewmodel.Model.font_cache, self.text_data.xref, new_text)
+        if tmp_path != None:
+            f = pymupdf.Font(fontfile=tmp_path)
         else:
-            metrics = QFontMetrics(self.edit_text.font())
-            width = int(metrics.horizontalAdvance(new_text) * self.scale_x)
+            f = pymupdf.Font(fontname=fontname)
+        width = int(f.text_length(new_text, fontsize=self.text_data.size) * self.scale_x)
         height = int(self.text_data.size * 1.3 * self.scale_y)
         self.setFixedSize(width + 2 * padding, height + 2 * padding)
         self.edit_text.deleteLater()

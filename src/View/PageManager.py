@@ -27,7 +27,6 @@ class PageManager:
         right = len(self.pages_QWidget)-1
         while left <= right: #binary search
             mid = (left+right)//2
-
             if self.pages_QWidget[mid].y()< cur_height:
                 left = mid+1
             else:

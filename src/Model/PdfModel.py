@@ -3,6 +3,7 @@ import os
 import pymupdf
 from PySide6.QtGui import QColor
 
+from src.View.utils import classify_font, resolve_font
 
 
 class PdfModel:
@@ -22,7 +23,9 @@ class PdfModel:
         self.total = len(self.file)
 
     def _extract_all_fonts(self):
+        os.makedirs("fonts", exist_ok=True)
         visited = set()
+        name_to_xref = {}
         for page_index in range(len(self.file)):
             for font in self.file[page_index].get_fonts(full=True):
                 xref = font[0]
@@ -33,19 +36,27 @@ class PdfModel:
                     font_bytes = self.file.extract_font(xref)[3]
                     if not font_bytes:
                         continue
-                    f = pymupdf.Font(fontbuffer=font_bytes)
-                    codepoints = set(f.valid_codepoints())
-                    tmp_path = f"src/fonts/pdf_font_{xref}.bin"
+                    subset = font[3]
+                    name = subset.split('+')[-1] if '+' in subset else subset
+                    tmp_path = f"fonts/pdf_font_{xref}.bin"
                     with open(tmp_path, 'wb') as fp:
                         fp.write(font_bytes)
-                    subset = font[3]
-                    if '+' in subset:
-                        name = subset.split('+')[-1]
-                    else:
-                        name = subset
-                    self.font_cache[xref] = {'codepoints': codepoints, 'tmp_path': tmp_path, 'name': name}
+                    f = pymupdf.Font(fontbuffer=font_bytes)
+                    self.font_cache[xref] = {'codepoints': set(),'tmp_path': tmp_path,'name': name,'category': classify_font(f)}
+                    name_to_xref[name] = xref
                 except Exception:
                     continue
+            for block in self.file[page_index].get_text("dict")["blocks"]:
+                if 'lines' not in block:
+                    continue
+                for line in block['lines']:
+                    for span in line['spans']:
+                        span_base = span['font'].split('+')[-1] if '+' in span['font'] else span['font']
+                        xref = name_to_xref.get(span_base)
+                        if xref is not None:
+                            data = self.font_cache[xref]
+                            for ch in span['text']:
+                                data['codepoints'].add(ord(ch))
 
     def _full_redraw(self, page, override_spans):
         blocks = page.get_text("dict")["blocks"]
@@ -56,11 +67,11 @@ class PdfModel:
 
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
             if text.strip():
-                data = self.font_cache.get(xref)
-                if data is not None and len(data) > 0:
-                    page.insert_text((x, y), text, fontsize=fontsize,fontfile=data['tmp_path'],fontname=f"F{xref}", color=pdf_color)
+                tmp_path, fontname = resolve_font(self.font_cache, xref, text)
+                if tmp_path:
+                    page.insert_text((x, y), text,fontsize=fontsize,fontfile=tmp_path,fontname=fontname,color=pdf_color)
                 else:
-                    page.insert_text((x, y), text, fontsize=fontsize,fontname=font, color=pdf_color)
+                    page.insert_text((x, y), text,fontsize=fontsize,fontname=fontname,color=pdf_color)
 
     def render_page(self, num, override_spans=None):
         page = self.file[num]
@@ -95,11 +106,11 @@ class PdfModel:
         """
         page = self.file[page_index]
         pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
-        data = self.font_cache.get(xref)
-        if data is not None and os.path.exists(data['tmp_path']):
-            page.insert_text((x, y), text, fontsize=fontsize,fontfile=data['tmp_path'],fontname=f"F{xref}",color=pdf_color)
+        tmp_path, fontname = resolve_font(self.font_cache, xref, text)
+        if tmp_path:
+            page.insert_text((x, y), text, fontsize=fontsize, fontfile=tmp_path, fontname=fontname, color=pdf_color)
         else:
-            page.insert_text((x, y), text, fontsize=fontsize, fontname=font, color=pdf_color)
+            page.insert_text((x, y), text, fontsize=fontsize, fontname=fontname, color=pdf_color)
 
 
     def get_text_blocks_i(self,page_index):

@@ -1,6 +1,7 @@
 from PySide6.QtCore import QObject, Signal
 from PySide6.QtGui import QImage, QColor
 
+from src.View.utils import has_char_in_fallback
 from src.ViewModel.EditorMode import EditorMode
 
 
@@ -39,6 +40,9 @@ class PdfViewModel(QObject):
             "cour": "Courier New"
         }
         return font_map[font_pymupdf]
+
+    def has_char_in_bundled(self, xref, char):
+        return has_char_in_fallback(self.Model.font_cache, xref, char)
 
     def font_pyside6_to_pymupdf(self, font_pyside6):
         font_map = {

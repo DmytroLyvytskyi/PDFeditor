@@ -1,6 +1,6 @@
-from PySide6.QtCore import Qt, QPoint
+from PySide6.QtCore import Qt, QPoint, QTimer
 from PySide6.QtGui import QFont, QFontMetrics, QFontDatabase
-from PySide6.QtWidgets import QWidget, QLineEdit, QMessageBox
+from PySide6.QtWidgets import QWidget, QLineEdit, QMessageBox, QApplication
 
 
 class DraggableLineEdit(QLineEdit):
@@ -13,6 +13,7 @@ class DraggableLineEdit(QLineEdit):
         self.scale_y = 1.0
         self.xref = 0
         self.textChanged.connect(self.adjust_size)
+        self._current_color = None
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -42,6 +43,7 @@ class DraggableLineEdit(QLineEdit):
         super().mouseReleaseEvent(event)
 
     def apply_change(self,font, fontsize, color):
+        self._current_color = color
         try:
             display_name = self.viewmodel.font_pymupdf_to_pyside6(font)
         except KeyError:
@@ -67,11 +69,32 @@ class DraggableLineEdit(QLineEdit):
         char = event.text()
         if char != "" and char != " " and self.xref != 0 and char.isprintable():
             if self.viewmodel.is_char_valid(self.xref, char) == False:
-                msg = QMessageBox()
-                msg.setWindowTitle("Unavailable сharacter ")
-                msg.setText(f"The symbol '{char}' is not available in this font.")
-                msg.setIcon(QMessageBox.Icon.Warning)
-                msg.exec()
+                if self.viewmodel.has_char_in_bundled(self.xref, char):
+                    def show_dialog(c=char, e=event):
+                        msg = QMessageBox(QApplication.activeWindow())
+                        msg.setWindowTitle("Character not in original font")
+                        msg.setText(
+                            f"The symbol '{c}' is not available in the original font.\n"
+                            "A similar font can be used instead."
+                        )
+                        msg.setIcon(QMessageBox.Icon.Question)
+                        use_btn = msg.addButton("Use similar font", QMessageBox.ButtonRole.AcceptRole)
+                        msg.addButton("Cancel", QMessageBox.ButtonRole.RejectRole)
+                        msg.exec()
+                        if msg.clickedButton() == use_btn:
+                            color = self._current_color if self._current_color else self.viewmodel.current_color
+                            fontsize = int(self.font().pixelSize() / self.scale_y)
+                            self.apply_change("tiro", fontsize, color)
+                            self.insert(c)
+                    QTimer.singleShot(0, show_dialog)
+                else:
+                    def show_warning(c=char):
+                        msg = QMessageBox(QApplication.activeWindow())
+                        msg.setWindowTitle("Unavailable character")
+                        msg.setText(f"The symbol '{c}' is not available in any font.")
+                        msg.setIcon(QMessageBox.Icon.Warning)
+                        msg.exec()
+                    QTimer.singleShot(0, show_warning)
                 return
         super().keyPressEvent(event)
 
