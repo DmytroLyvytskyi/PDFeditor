@@ -79,10 +79,13 @@ class PdfModel:
             self._full_redraw(page, override_spans)
         return page.get_pixmap()
 
-    def save_file(self, path, override_spans_pages=None):
+    def save_file(self, path, override_spans_pages=None, override_images_pages=None):
         if override_spans_pages:
             for page_index, spans in override_spans_pages.items():
                 self._full_redraw(self.file[page_index], spans)
+        if override_images_pages:
+            for page_index, images in override_images_pages.items():
+                self.insert_images(self.file[page_index], images)
         try:
             self.file.save(path, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
         except Exception:
@@ -199,4 +202,9 @@ class PdfModel:
                 xref = font_xref_map.get(first['font'], 0)
                 result.append([first['size'], first['font'], qcolor, merged_text, merged_bbox, first['origin'], xref])
         return result
+
+    def insert_images(self, page, images):
+        for img in images:
+            rect = pymupdf.Rect(img.x, img.y, img.x + img.width, img.y + img.height)
+            page.insert_image(rect, filename=img.path, overlay=img.overlay)
 

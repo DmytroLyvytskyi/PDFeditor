@@ -5,6 +5,7 @@ from PySide6.QtCore import Qt, QTimer
 
 from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.EditTextQLabel import EditTextQLabel
+from src.View.ImageTool import ImageTool
 from src.View.PageManager import PageManager
 from src.View.PageQLabel import PageQLabel
 from src.View.TextData import TextData
@@ -36,6 +37,11 @@ class PdfView(QMainWindow):
             self.pages_QWidget,
             self.page_manager
         )
+        self.image_tool = ImageTool(
+            self.viewmodel,
+            self.pages_QWidget,
+            self.page_manager
+        )
         self.setup_toolbar()
         self.ui.toolBar_2.hide()
 
@@ -44,6 +50,7 @@ class PdfView(QMainWindow):
         self.mode_group.addAction(self.ui.actionAdd_Text)
         self.mode_group.addAction(self.ui.actionEdit_Text)
         self.mode_group.setExclusive(True)
+
 
         self.ui.actionView.setChecked(True)
         self.viewmodel.set_mode(EditorMode.VIEW)
@@ -76,6 +83,7 @@ class PdfView(QMainWindow):
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
         self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
+        self.ui.actionAdd_Image.triggered.connect(self._on_add_image_clicked)
         self.viewmodel.page_number_changed.connect(self.set_selector)
         self.viewmodel.mode_changed.connect(self.mode_changed)
         self.ui.prev_btn.clicked.connect(self._prev_page)
@@ -109,6 +117,16 @@ class PdfView(QMainWindow):
 
         self.font_choose.currentTextChanged.connect(self.change_font)
         self.size_choose.valueChanged.connect(self.change_size)
+
+        self.overlay_btn = QPushButton("Before text")
+        self.overlay_btn.setCheckable(True)
+        self.overlay_btn.setChecked(True)
+        self.overlay_btn.clicked.connect(self._toggle_overlay)
+        self.ui.toolBar_2.addWidget(self.overlay_btn)
+
+    def _toggle_overlay(self, checked):
+        self.image_tool.overlay = checked
+        self.overlay_btn.setText("Before text" if checked else "Behind text")
 
     def _on_pages_loaded(self, start: int, end: int):
         if self.viewmodel.mode == EditorMode.EDIT_TEXT:
@@ -144,19 +162,22 @@ class PdfView(QMainWindow):
     def _save_file(self):
         if self.viewmodel.current_path:
             override = self.text_tool.get_override_spans_for_save()
-            self.viewmodel.save_file(self.viewmodel.current_path, override)
+            images = self.image_tool.get_override_images_for_save()
+            self.viewmodel.save_file(self.viewmodel.current_path, override, images)
 
     def _save_file_as(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Pdf Files (*.pdf)")
         if file_path != "":
             override = self.text_tool.get_override_spans_for_save()
-            self.viewmodel.save_file_as(file_path, override)
+            images = self.image_tool.get_override_images_for_save()
+            self.viewmodel.save_file_as(file_path, override, images)
 
 
     def _open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
         if file_path != "":
             self.text_tool.clear()
+            self.image_tool.clear()
             self.page_manager.clear_pages()
             self.viewmodel.open_file(file_path)
             self.ui.total.setText(f"/{self.viewmodel.get_total()}")
@@ -251,3 +272,9 @@ class PdfView(QMainWindow):
 
         if self.viewmodel.mode == EditorMode.ADD_TEXT:
             self.text_tool.add_text_func(x, y, page_index)
+
+        if self.viewmodel.mode == EditorMode.ADD_IMAGE:
+            self.image_tool.add_image_func(page_index)
+
+    def _on_add_image_clicked(self):
+        self.image_tool.add_image_func(self.viewmodel.current_page)

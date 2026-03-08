@@ -19,9 +19,7 @@ class DraggableLineEdit(QLineEdit):
         if event.button() == Qt.LeftButton:
             self.drag = True
             self.offset = event.pos() # event.pos -> position relative to the widget that was clicked
-            super().mousePressEvent(event)
-        else:
-            super().mousePressEvent(event)
+        super().mousePressEvent(event)
 
     def adjust_size(self):
         metrics = QFontMetrics(self.font())

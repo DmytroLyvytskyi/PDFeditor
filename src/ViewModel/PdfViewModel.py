@@ -61,12 +61,12 @@ class PdfViewModel(QObject):
             return True
         return ord(char) in data['codepoints']
 
-    def save_file(self, path, override_spans_pages=None):
-        self.Model.save_file(path, override_spans_pages)
+    def save_file(self, path, override_spans_pages=None, override_images_pages=None):
+        self.Model.save_file(path, override_spans_pages, override_images_pages)
 
-    def save_file_as(self, path, override_spans_pages=None):
+    def save_file_as(self, path, override_spans_pages=None, override_images_pages=None):
         self.current_path = path
-        self.Model.save_file(path, override_spans_pages)
+        self.Model.save_file(path, override_spans_pages, override_images_pages)
 
     def set_current_font(self, font_name):
         self.current_font = font_name

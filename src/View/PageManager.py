@@ -52,8 +52,6 @@ class PageManager:
             if self.on_pages_loaded:
                 self.on_pages_loaded(start_index, start_index + len(pages))
 
-
-
     def rerender_page(self, page_index, override_spans=None):
         new = self.viewmodel.get_page_i(page_index, override_spans)
         self.pages_QWidget[page_index].setPixmap(QPixmap.fromImage(new))
