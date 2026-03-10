@@ -1,5 +1,6 @@
+import atexit
 import os
-
+import shutil
 import pymupdf
 from PySide6.QtGui import QColor
 
@@ -11,14 +12,18 @@ class PdfModel:
         self.file = None
         self.total = None
         self.font_cache = {}
+        self._page_spans_cache = {}
+        atexit.register(self.cleanup)
 
     def open_file(self, path):
         if self.file != None:
             self.file.close()
             self.file = None
             self.total = None
+        self.cleanup()
         self.file = pymupdf.open(path)
         self.font_cache = {}
+        self._page_spans_cache = {}
         self._extract_all_fonts()
         self.total = len(self.file)
 
@@ -85,7 +90,7 @@ class PdfModel:
                 self._full_redraw(self.file[page_index], spans)
         if override_images_pages:
             for page_index, images in override_images_pages.items():
-                self.insert_images(self.file[page_index], images)
+                self.full_redraw_images(self.file[page_index], images)
         try:
             self.file.save(path, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
         except Exception:
@@ -206,5 +211,68 @@ class PdfModel:
     def insert_images(self, page, images):
         for img in images:
             rect = pymupdf.Rect(img.x, img.y, img.x + img.width, img.y + img.height)
-            page.insert_image(rect, filename=img.path, overlay=img.overlay)
+            page.insert_image(rect, filename=img.path, overlay=img.overlay, keep_proportion=False)
 
+    def get_images_i(self, page_index):
+        page = self.file[page_index]
+        result = []
+        os.makedirs("fonts", exist_ok=True)
+        for info in page.get_image_info(xrefs=True):
+            bbox = info['bbox']
+            xref = info.get('xref', 0)
+            try:
+                if xref and xref > 0:
+                    img_data = self.file.extract_image(xref)
+                    ext = img_data['ext']
+                    tmp_path = f"fonts/img_{xref}.{ext}"
+                    with open(tmp_path, 'wb') as fp:
+                        fp.write(img_data['image'])
+                else:
+                    clip = pymupdf.Rect(bbox)
+                    mat = pymupdf.Matrix(1, 1)
+                    pix = page.get_pixmap(matrix=mat, clip=clip)
+                    tmp_path = f"fonts/img_inline_{hash(str(bbox))}.png"
+                    pix.save(tmp_path)
+                result.append({
+                    'path': tmp_path,
+                    'x': bbox[0], 'y': bbox[1],
+                    'w': bbox[2] - bbox[0], 'h': bbox[3] - bbox[1],
+                })
+            except Exception:
+                continue
+        return result
+
+    def full_redraw_images(self, page, images):
+        spans = self.get_original_spans(page.number)
+        for info in page.get_image_info():
+            page.add_redact_annot(info['bbox'])
+        for block in page.get_text("dict")["blocks"]:
+            if 'lines' in block:
+                page.add_redact_annot(block['bbox'])
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_REMOVE)
+        self._full_redraw(page, spans)
+        self.insert_images(page, images)
+
+    def insert_image_at(self, page_index, img_data):
+        page = self.file[page_index]
+        rect = pymupdf.Rect(img_data.x, img_data.y,
+                            img_data.x + img_data.width, img_data.y + img_data.height)
+        page.insert_image(rect, filename=img_data.path, overlay=img_data.overlay, keep_proportion=False)
+
+    def get_original_spans(self, page_index):
+        if page_index not in self._page_spans_cache:
+            converted = []
+            for size, font, qcolor, text, bbox, origin, xref in self.get_spans_i(page_index):
+                x, y = origin
+                pdf_color = (qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0)
+                converted.append((x, y, text, font, size, pdf_color, xref))
+            self._page_spans_cache[page_index] = converted
+        return self._page_spans_cache[page_index]
+
+    def cleanup(self):
+        if not os.path.exists("fonts"):
+            return
+        for f in os.listdir("fonts"):
+            path = os.path.join("fonts", f)
+            if os.path.isfile(path):
+                os.remove(path)

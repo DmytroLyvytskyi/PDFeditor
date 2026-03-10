@@ -4,7 +4,8 @@ from PySide6.QtWidgets import QStyle
 from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.EditTextQLabel import EditTextQLabel
 from src.View.TextData import TextData
-from src.View.utils import *
+from src.View.utils import calculate_x_offset, get_scale
+
 
 class TextTool:
     def __init__(self, viewmodel, pages_QWidget, page_manager):
@@ -29,7 +30,7 @@ class TextTool:
             except RuntimeError:
                 pass
             self.add_text = None
-        scale_x, scale_y = self._get_scale(page_index, label)
+        scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         self.add_text = DraggableLineEdit(self.viewmodel, label)
         self.add_text.scale_y = scale_y
         self.add_text.xref = self.viewmodel.current_font_xref
@@ -55,7 +56,7 @@ class TextTool:
             return []
         label = self.pages_QWidget[page_index]
         x_offset = calculate_x_offset(label)
-        scale_x, scale_y = self._get_scale(page_index, label)
+        scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         padding = 5
         result = []
         for lbl in self.edit_labels[page_index]:
@@ -76,7 +77,7 @@ class TextTool:
         if text != "":
             label = self.pages_QWidget[page_index]
             x_offset = calculate_x_offset(label)
-            scale_x, scale_y = self._get_scale(page_index, label)
+            scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
             metrics = QFontMetrics(self.add_text.font())
             frame = self.add_text.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth)
             pdf_x = (self.add_text.x() + frame - x_offset) / scale_x
@@ -85,13 +86,6 @@ class TextTool:
         self.add_text.deleteLater()
         self.add_text = None
         self.page_manager.rerender_page(page_index)
-
-    def _get_scale(self, page_index, label):
-        page_rect = self.viewmodel.Model.file[page_index].rect
-        pixmap = label.pixmap()
-        scale_x = pixmap.width() / page_rect.width
-        scale_y = pixmap.height() / page_rect.height
-        return scale_x, scale_y
 
     def move_text(self, page_index):
         override_spans = self._collect_current_pdf_spans(page_index)
@@ -117,7 +111,7 @@ class TextTool:
         spans = self.viewmodel.get_spans_i(page_index)
         x_offset = calculate_x_offset(label)
         page_labels = []
-        scale_x, scale_y = self._get_scale(page_index, label)
+        scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         for size, font, color, text, bbox, origin, xref in spans:
             text_data = TextData(text, font, size, color, origin, xref)
             top = int((origin[1] - size) * scale_y)

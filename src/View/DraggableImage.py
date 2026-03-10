@@ -1,21 +1,24 @@
 from PySide6.QtCore import Qt, QPoint
 from PySide6.QtGui import QPixmap
-from PySide6.QtWidgets import QLabel, QSizeGrip
+from PySide6.QtWidgets import QLabel, QSizeGrip, QMenu
+
 
 class DraggableImage(QLabel):
 
-    def __init__(self, path, x, y, w, h, parent=None):
+    def __init__(self, path, x, y, w, h, overlay=True, on_delete=None, parent=None):
         super().__init__(parent)
         self.image_path = path
         self.drag = False
         self.offset = QPoint(0, 0)
         self.min_size = 20
+        self.overlay = overlay
+        self.on_delete = on_delete
 
         self.setGeometry(x, y, w, h)
         self.load_pixmap()
         self.handle = QLabel(self)
         self.handle.setFixedSize(12, 12)
-        self.handle.setStyleSheet("background-color: #028090; border: 1px solid white;")
+        self.handle.setStyleSheet("background-color: #000000; border: 1px solid white;")
         self.handle.drag = False
         self.handle.offset = QPoint(0, 0)
         self.handle.mousePressEvent = self.handle_press
@@ -23,7 +26,7 @@ class DraggableImage(QLabel):
         self.handle.mouseReleaseEvent = self.handle_release
         self.place()
 
-        self.setStyleSheet("border: 1px dashed #028090;")
+        self.setStyleSheet("border: 1px dashed #000000;")
         self.show()
 
     def load_pixmap(self):
@@ -72,3 +75,25 @@ class DraggableImage(QLabel):
 
     def handle_release(self, event):
         self.handle.drag = False
+
+    def contextMenuEvent(self, event):
+        menu = QMenu(self)
+        before_action = menu.addAction("Before text")
+        behind_action = menu.addAction("Behind text")
+        menu.addSeparator()
+        delete_action = menu.addAction("Delete")
+
+        before_action.setCheckable(True)
+        behind_action.setCheckable(True)
+        before_action.setChecked(self.overlay)
+        behind_action.setChecked(not self.overlay)
+
+        action = menu.exec(event.globalPos())
+        if action == before_action:
+            self.overlay = True
+        elif action == behind_action:
+            self.overlay = False
+        elif action == delete_action:
+            if self.on_delete:
+                self.on_delete(self)
+            self.deleteLater()

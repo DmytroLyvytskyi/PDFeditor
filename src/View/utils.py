@@ -7,6 +7,13 @@ import pymupdf
 def calculate_x_offset(label):
     return label.width() / 2 - label.pixmap().width() / 2
 
+def get_scale(viewmodel, page_index, label):
+    page_rect = viewmodel.Model.file[page_index].rect
+    pixmap = label.pixmap()
+    scale_x = pixmap.width() / page_rect.width
+    scale_y = pixmap.height() / page_rect.height
+    return scale_x, scale_y
+
 
 pymupdf_fonts = {
     "serif":             "tiro",

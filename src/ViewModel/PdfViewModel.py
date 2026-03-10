@@ -112,7 +112,8 @@ class PdfViewModel(QObject):
         image = QImage(pix.samples, pix.width, pix.height, pix.stride, QImage.Format_RGB888)
         return image
 
-
+    def insert_image(self, page_index, img_data):
+        self.Model.insert_image_at(page_index, img_data)
 
     def get_total(self):
         return self.Model.total
@@ -127,5 +128,11 @@ class PdfViewModel(QObject):
 
     def add_text(self, text, x, y, page_index, xref=0):
         self.Model.add_text(text, x, y, page_index, self.current_font, self.current_fontsize, self.current_color, xref)
+
+    def get_images_i(self, page_index):
+        return self.Model.get_images_i(page_index)
+
+    def commit_image_edit(self, page_index, images):
+        self.Model.full_redraw_images(self.Model.file[page_index], images)
 
 

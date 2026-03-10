@@ -1,7 +1,7 @@
 from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction, QPen, QFont
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
     QLineEdit, QComboBox, QSpinBox, QColorDialog, QToolButton, QMenu, QApplication
-from PySide6.QtCore import Qt, QTimer
+from PySide6.QtCore import Qt, QTimer, QEvent
 
 from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.EditTextQLabel import EditTextQLabel
@@ -49,6 +49,7 @@ class PdfView(QMainWindow):
         self.mode_group.addAction(self.ui.actionView)
         self.mode_group.addAction(self.ui.actionAdd_Text)
         self.mode_group.addAction(self.ui.actionEdit_Text)
+        self.mode_group.addAction(self.ui.actionEdit_Image)
         self.mode_group.setExclusive(True)
 
 
@@ -57,6 +58,7 @@ class PdfView(QMainWindow):
 
         self.setup_connections()
         self.setup_file_menu()
+        self._setup_event_filter()
 
     def setup_file_menu(self):
         self.file_btn = QToolButton(self.ui.toolBar)
@@ -83,7 +85,10 @@ class PdfView(QMainWindow):
         self.ui.actionView.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.VIEW))
         self.ui.actionAdd_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.ADD_TEXT))
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
+        self.ui.actionEdit_Image.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_IMAGE))
         self.ui.actionAdd_Image.triggered.connect(self._on_add_image_clicked)
+
+
         self.viewmodel.page_number_changed.connect(self.set_selector)
         self.viewmodel.mode_changed.connect(self.mode_changed)
         self.ui.prev_btn.clicked.connect(self._prev_page)
@@ -118,26 +123,38 @@ class PdfView(QMainWindow):
         self.font_choose.currentTextChanged.connect(self.change_font)
         self.size_choose.valueChanged.connect(self.change_size)
 
-        self.overlay_btn = QPushButton("Before text")
-        self.overlay_btn.setCheckable(True)
-        self.overlay_btn.setChecked(True)
-        self.overlay_btn.clicked.connect(self._toggle_overlay)
-        self.ui.toolBar_2.addWidget(self.overlay_btn)
 
-    def _toggle_overlay(self, checked):
-        self.image_tool.overlay = checked
-        self.overlay_btn.setText("Before text" if checked else "Behind text")
+    def _setup_event_filter(self):
+        QApplication.instance().installEventFilter(self)
 
-    def _on_pages_loaded(self, start: int, end: int):
-        if self.viewmodel.mode == EditorMode.EDIT_TEXT:
-            QTimer.singleShot(0, lambda: self._apply_edit_labels(start, end))
+    def eventFilter(self, obj, event):
+        if event.type() == QEvent.Type.KeyPress:
+            if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+                if self.viewmodel.mode == EditorMode.ADD_IMAGE:
+                    self.image_tool.commit_all()
+                    self.ui.actionView.setChecked(True)
+                    self.viewmodel.set_mode(EditorMode.VIEW)
+                    return True
+                if self.viewmodel.mode == EditorMode.EDIT_IMAGE:
+                    self.image_tool.commit_edit_images()
+                    self.ui.actionView.setChecked(True)
+                    self.viewmodel.set_mode(EditorMode.VIEW)
+                    return True
+        return super().eventFilter(obj, event)
 
-    def _apply_edit_labels(self, start: int, end: int):
+    def _on_pages_loaded(self, start, end):
+        if self.viewmodel.mode in (EditorMode.EDIT_TEXT, EditorMode.EDIT_IMAGE):
+            QTimer.singleShot(0, lambda: self._apply_edit_mode(start, end))
+
+    def _apply_edit_mode(self, start: int, end: int):
         self.ui.scrollArea.widget().layout().activate()
         QApplication.processEvents()
-        for i in range(start, end):
-            self.text_tool.prepare_edit_mode_i(i)
-
+        if self.viewmodel.mode == EditorMode.EDIT_TEXT:
+            for i in range(start, end):
+                self.text_tool.prepare_edit_mode_i(i)
+        elif self.viewmodel.mode == EditorMode.EDIT_IMAGE:
+            for i in range(start, end):
+                self.image_tool.prepare_edit_mode_i(i)
 
     def _prev_page(self):
         self.viewmodel.prev_page()
@@ -161,17 +178,18 @@ class PdfView(QMainWindow):
 
     def _save_file(self):
         if self.viewmodel.current_path:
+            if self.viewmodel.mode == EditorMode.EDIT_IMAGE:
+                self.image_tool.commit_edit_images()
             override = self.text_tool.get_override_spans_for_save()
-            images = self.image_tool.get_override_images_for_save()
-            self.viewmodel.save_file(self.viewmodel.current_path, override, images)
+            self.viewmodel.save_file(self.viewmodel.current_path, override, None)
 
     def _save_file_as(self):
         file_path, _ = QFileDialog.getSaveFileName(self, "Save As", "", "Pdf Files (*.pdf)")
         if file_path != "":
+            if self.viewmodel.mode == EditorMode.EDIT_IMAGE:
+                self.image_tool.commit_edit_images()
             override = self.text_tool.get_override_spans_for_save()
-            images = self.image_tool.get_override_images_for_save()
-            self.viewmodel.save_file_as(file_path, override, images)
-
+            self.viewmodel.save_file_as(file_path, override, None)
 
     def _open_file(self):
         file_path, _ = QFileDialog.getOpenFileName(None, "Open PDF", "", "Pdf Files (*.pdf)")
@@ -237,10 +255,10 @@ class PdfView(QMainWindow):
             )
 
     def update_toolbar_visibility(self, mode):
-        if mode == EditorMode.VIEW:
-            self.ui.toolBar_2.hide()
-        else:
+        if mode in (EditorMode.ADD_TEXT, EditorMode.EDIT_TEXT):
             self.ui.toolBar_2.show()
+        else:
+            self.ui.toolBar_2.hide()
 
     def update_color_action_icon(self):
         pixmap = QPixmap(16, 16)
@@ -259,22 +277,25 @@ class PdfView(QMainWindow):
                 self.viewmodel.current_color
             )
 
-    def mode_changed(self,mode):
+    def mode_changed(self, mode):
         self.update_toolbar_visibility(mode)
+        if mode != EditorMode.ADD_IMAGE:
+            self.image_tool.commit_all()
         if mode == EditorMode.EDIT_TEXT:
             self.text_tool.prepare_edit_mode()
         else:
             self.text_tool.clear_edit_labels()
+        if mode == EditorMode.EDIT_IMAGE:
+            self.image_tool.prepare_edit_mode()
+        else:
+            self.image_tool.clear_edit_images()
 
     def page_clicked(self, x, y, page_index):
         if self.viewmodel.mode == EditorMode.VIEW:
             return
-
         if self.viewmodel.mode == EditorMode.ADD_TEXT:
             self.text_tool.add_text_func(x, y, page_index)
 
-        if self.viewmodel.mode == EditorMode.ADD_IMAGE:
-            self.image_tool.add_image_func(page_index)
-
     def _on_add_image_clicked(self):
-        self.image_tool.add_image_func(self.viewmodel.current_page)
+        if self.image_tool.add_image_func(self.viewmodel.current_page):
+            self.viewmodel.set_mode(EditorMode.ADD_IMAGE)
