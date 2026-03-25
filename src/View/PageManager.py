@@ -49,8 +49,8 @@ class PageManager:
             page_label.coords.connect(self.page_clicked)
             self.layout.addWidget(page_label)
             self.pages_QWidget.append(page_label)
-            if self.on_pages_loaded:
-                self.on_pages_loaded(start_index, start_index + len(pages))
+        if self.on_pages_loaded:
+            self.on_pages_loaded(start_index, start_index + len(pages))
 
     def rerender_page(self, page_index, override_spans=None, blank_rects=None, composite_images=None):
         new = self.viewmodel.get_page_i(page_index, override_spans)

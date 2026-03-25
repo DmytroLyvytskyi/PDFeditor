@@ -54,6 +54,7 @@ class EditTextQLabel(QLabel):
             label = self.parent()
             self.edit_text = DraggableLineEdit(self.viewmodel, label)
             self.edit_text.xref = self.text_data.xref
+            self.edit_text.scale_y = self.scale_y
             self.edit_text.move(self.x(), self.y())
             self.hide()
             self.edit_text.show()
@@ -65,13 +66,31 @@ class EditTextQLabel(QLabel):
                 self.text_data.color
             )
             self.edit_text.returnPressed.connect(self.finished)
+            self.edit_text.font_fallback_applied.connect(self._on_inline_fallback)
         super().mouseDoubleClickEvent(event)
+
+    def _on_inline_fallback(self, font_name, fontsize, color):
+        self.text_data.font = font_name
+        self.text_data.size = fontsize
+        self.text_data.xref = 0
+        if self.edit_text:
+            self.edit_text.xref = 0
+        self.selected.emit(self)
 
     def apply_change(self, font, fontsize, color):
         self.text_data.font = font
         self.text_data.size = fontsize
         self.text_data.color = color
         self.update_visual_size()
+        if self.edit_text is not None:
+            self.edit_text.xref = self.text_data.xref
+            try:
+                self.edit_text.apply_change(font, fontsize, color)
+            except RuntimeError:
+                self.edit_text = None
+        self.coords.emit(self.x(), self.y(), self.bbox)
+
+    def commit(self):
         self.coords.emit(self.x(), self.y(), self.bbox)
 
     def finished(self):
@@ -80,8 +99,10 @@ class EditTextQLabel(QLabel):
         self.text_data.xref = self.edit_text.xref
         self.drag = False
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
+        self.move(self.edit_text.pos())
         padding = 5
-        tmp_path, fontname = resolve_font(self.viewmodel.Model.font_cache, self.text_data.xref, new_text)
+        tmp_path, fontname = resolve_font(self.viewmodel.Model.font_cache, self.text_data.xref, new_text,
+                                          font_name=self.text_data.font)
         if tmp_path != None:
             f = pymupdf.Font(fontfile=tmp_path)
         else:
