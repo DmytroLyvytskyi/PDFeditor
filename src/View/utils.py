@@ -11,6 +11,13 @@ _STYLE_WORDS = [
     'semibold', 'demibold', 'condensed', 'narrow', 'roman', 'book',
     'psmt', 'mt', 'ps', 'std', 'pro', 'lt', 'ot',
 ]
+_PYMUPDF_BUILTINS = {
+    'helv', 'hebo', 'heit', 'hebi',
+    'tiro', 'tibo', 'tiit', 'tibi',
+    'cour', 'cobo', 'coit', 'cobi',
+    'symb', 'zadb',
+}
+
 
 _ALIASES = {
     'msshelldlg2': 'arial',
@@ -222,6 +229,8 @@ def get_bundled_font(category):
 
 def resolve_font(font_cache, xref, text, font_name=None):
     data = font_cache.get(xref)
+    if data is None and font_name and font_name in _PYMUPDF_BUILTINS:
+        return None, font_name
 
     if data is not None:
         chars = [ch for ch in text if ch.strip() and ch != '\x00']
@@ -289,6 +298,9 @@ def has_char_in_fallback(font_cache, xref, char):
 
 def calculate_x_offset(label) -> float:
     return label.width() / 2 - label.pixmap().width() / 2
+
+def calculate_y_offset(label) -> float:
+    return max(0.0, label.height() / 2 - label.pixmap().height() / 2)
 
 
 def get_scale(viewmodel, page_index, label):

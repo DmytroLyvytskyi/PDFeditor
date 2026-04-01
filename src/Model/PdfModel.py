@@ -50,18 +50,26 @@ class PdfModel:
     def _extract_all_fonts(self):
         os.makedirs("fonts", exist_ok=True)
         visited = set()
+
         for page_index in range(len(self.file)):
-            for font in self.file[page_index].get_fonts(full=True):
+            page = self.file[page_index]
+            fonts = page.get_fonts(full=True)
+            page_font_xref_map = {}
+            for font in fonts:
                 xref = font[0]
+                subset = font[3]
+                base = subset.split('+')[-1] if '+' in subset else subset
+                page_font_xref_map[base] = xref
+
                 if xref in visited:
                     continue
                 visited.add(xref)
+
                 try:
                     font_bytes = self.file.extract_font(xref)[3]
                     if not font_bytes:
                         continue
-                    subset = font[3]
-                    name = subset.split('+')[-1] if '+' in subset else subset
+                    name = base
                     tmp_path = f"fonts/pdf_font_{xref}.bin"
                     with open(tmp_path, 'wb') as fp:
                         fp.write(font_bytes)
@@ -74,14 +82,7 @@ class PdfModel:
                 except Exception:
                     continue
 
-            page_font_xref_map = {}
-            for font in self.file[page_index].get_fonts(full=True):
-                xref = font[0]
-                subset = font[3]
-                base = subset.split('+')[-1] if '+' in subset else subset
-                page_font_xref_map[base] = xref
-
-            for block in self.file[page_index].get_text("dict")["blocks"]:
+            for block in page.get_text("dict")["blocks"]:
                 if 'lines' not in block:
                     continue
                 for line in block['lines']:
@@ -89,9 +90,8 @@ class PdfModel:
                         span_base = span['font'].split('+')[-1] if '+' in span['font'] else span['font']
                         xref = page_font_xref_map.get(span_base)
                         if xref is not None and xref in self.font_cache:
-                            data = self.font_cache[xref]
                             for ch in span['text']:
-                                data['codepoints'].add(ord(ch))
+                                self.font_cache[xref]['codepoints'].add(ord(ch))
 
         name_to_xrefs = {}
         for xref, data in self.font_cache.items():
@@ -103,21 +103,23 @@ class PdfModel:
         for name, xrefs in name_to_xrefs.items():
             if len(xrefs) <= 1:
                 continue
-            all_codepoints = set()
-            for x in xrefs:
-                all_codepoints.update(self.font_cache[x]['codepoints'])
-            for x in xrefs:
-                self.font_cache[x]['codepoints'] = all_codepoints
+            canonical = xrefs[0]
+            for other_xref in xrefs[1:]:
+                self.font_cache[canonical]['codepoints'].update(
+                    self.font_cache[other_xref]['codepoints']
+                )
+                self.font_cache[other_xref] = self.font_cache[canonical]
 
     def _full_redraw(self, page, override_spans):
         blocks = page.get_text("dict")["blocks"]
         for block in blocks:
             if 'lines' in block:
                 page.add_redact_annot(block['bbox'])
-        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE)
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
-            if text.strip():
-                tmp_path, fontname = resolve_font(self.font_cache, xref, text, font_name=font)
+            clean_text = text.replace('\x00', '')
+            if clean_text.strip():
+                tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
                 self._fontname_info[fontname] = (xref, font)
                 if xref in self.font_cache:
                     real_name = self.font_cache[xref]['name']
@@ -125,10 +127,11 @@ class PdfModel:
                     if existing is None or existing[0] == 0:
                         self._fontname_info[real_name] = (xref, font)
                 if tmp_path:
-                    page.insert_text((x, y), text, fontsize=fontsize, fontfile=tmp_path, fontname=fontname, color=pdf_color)
+                    page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                     fontfile=tmp_path, fontname=fontname, color=pdf_color)
                 else:
-                    page.insert_text((x, y), text, fontsize=fontsize, fontname=fontname, color=pdf_color)
-        self._page_spans_cache.pop(page.number, None)
+                    page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                     fontname=fontname, color=pdf_color)
 
     def render_page(self, num, override_spans=None, zoom=1.0):
         page = self.file[num]
@@ -329,14 +332,103 @@ class PdfModel:
         for img in images:
             self._insert_single_image(page, img)
 
+
+
+    def full_redraw_images(self, page, images, text_spans=None):
+        self.save_snapshot(page.number)
+        self._remove_images_from_content_stream(page)
+        if text_spans is not None:
+            blocks = page.get_text("dict")["blocks"]
+            for block in blocks:
+                if 'lines' in block:
+                    page.add_redact_annot(block['bbox'], fill=())
+            page.apply_redactions(
+                images=pymupdf.PDF_REDACT_IMAGE_NONE,
+                graphics=pymupdf.PDF_REDACT_LINE_ART_NONE
+            )
+            for x, y, text, font, fontsize, pdf_color, xref in text_spans:
+                if text.strip():
+                    tmp_path, fontname = resolve_font(self.font_cache, xref, text, font_name=font)
+                    self._fontname_info[fontname] = (xref, font)
+                    if xref in self.font_cache:
+                        real_name = self.font_cache[xref]['name']
+                        existing = self._fontname_info.get(real_name)
+                        if existing is None or existing[0] == 0:
+                            self._fontname_info[real_name] = (xref, font)
+                    try:
+                        if tmp_path:
+                            page.insert_text((x, y), text, fontsize=fontsize,
+                                             fontfile=tmp_path, fontname=fontname, color=pdf_color)
+                        else:
+                            page.insert_text((x, y), text, fontsize=fontsize,
+                                             fontname=fontname, color=pdf_color)
+                    except Exception:
+                        pass
+
+        self._page_spans_cache.pop(page.number, None)
+        self.insert_images(page, images)
+        self._cleanup_rotated_temps()
+
+    def _cleanup_rotated_temps(self):
+        if not os.path.exists("fonts"):
+            return
+        for f in os.listdir("fonts"):
+            if f.startswith("rotated_"):
+                try:
+                    os.remove(os.path.join("fonts", f))
+                except Exception:
+                    pass
+
+    def _detect_image_overlay(self, page):
+        import re
+        result = {}
+        try:
+            xref_to_name = {}
+            for img in page.get_images(full=True):
+                xref, name = img[0], img[7]
+                if name:
+                    xref_to_name[xref] = name.encode()
+            if not xref_to_name:
+                return result
+            full_stream = b''
+            for c_xref in page.get_contents():
+                s = self.file.xref_stream(c_xref)
+                if s:
+                    full_stream += s + b'\n'
+
+            bt = re.search(rb'\bBT\b', full_stream)
+            first_text_pos = bt.start() if bt else len(full_stream)
+
+            for img_xref, name_bytes in xref_to_name.items():
+                m = re.search(rb'/' + re.escape(name_bytes) + rb'\s+Do', full_stream)
+                if m:
+                    result[img_xref] = m.start() > first_text_pos
+                else:
+                    result[img_xref] = True
+        except Exception:
+            pass
+        return result
+
     def get_images_i(self, page_index):
         page = self.file[page_index]
         result = []
         os.makedirs("fonts", exist_ok=True)
         os.makedirs("fonts/originals", exist_ok=True)
+
+        overlay_map = self._detect_image_overlay(page)
+
         for info in page.get_image_info(xrefs=True):
             bbox = info['bbox']
             xref = info.get('xref', 0)
+            if xref and xref > 0:
+                try:
+                    pw = int(self.file.xref_get_key(xref, 'Width')[1])
+                    ph = int(self.file.xref_get_key(xref, 'Height')[1])
+                    if pw <= 4 and ph <= 4:
+                        continue
+                except Exception:
+                    pass
+
             try:
                 orig_bytes = None
                 if xref and xref > 0:
@@ -361,41 +453,63 @@ class PdfModel:
                     with open(orig_key, 'wb') as fp:
                         fp.write(orig_bytes)
 
-                tmp_path = orig_key
-
                 result.append({
-                    'path': tmp_path,
+                    'path': orig_key,
                     'original_path': orig_key,
                     'x': bbox[0], 'y': bbox[1],
                     'w': bbox[2] - bbox[0], 'h': bbox[3] - bbox[1],
+                    'overlay': overlay_map.get(xref, True),
                 })
             except Exception:
                 continue
         return result
 
-    def full_redraw_images(self, page, images, text_spans=None):
-        self.save_snapshot(page.number)
-        spans = text_spans if text_spans is not None else self.get_original_spans(page.number)
-        for info in page.get_image_info():
-            page.add_redact_annot(info['bbox'])
-        for block in page.get_text("dict")["blocks"]:
-            if 'lines' in block:
-                page.add_redact_annot(block['bbox'])
-        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_REMOVE)
-        self._full_redraw(page, spans)
-        self._page_spans_cache[page.number] = spans
-        self.insert_images(page, images)
-        self._cleanup_rotated_temps()
+    def _remove_images_from_content_stream(self, page):
+        import re
+        try:
+            image_names = set()
+            for img in page.get_images(full=True):
+                xref_img = img[0]
+                name = img[7]
+                if not name:
+                    continue
+                if xref_img and xref_img > 0:
+                    try:
+                        pw = int(self.file.xref_get_key(xref_img, 'Width')[1])
+                        ph = int(self.file.xref_get_key(xref_img, 'Height')[1])
+                        if pw <= 4 and ph <= 4:
+                            continue
+                    except Exception:
+                        pass
+                image_names.add(name.encode())
 
-    def _cleanup_rotated_temps(self):
-        if not os.path.exists("fonts"):
-            return
-        for f in os.listdir("fonts"):
-            if f.startswith("rotated_"):
-                try:
-                    os.remove(os.path.join("fonts", f))
-                except Exception:
-                    pass
+            if not image_names:
+                return
+
+            page.clean_contents(sanitize=False)
+            contents = page.get_contents()
+            if not contents:
+                return
+
+            xref = contents[0]
+            stream = self.file.xref_stream(xref)
+            if not stream:
+                return
+
+            modified = False
+            new_stream = stream
+            for name in image_names:
+                pattern = rb'/' + re.escape(name) + rb'\s+Do'
+                replaced = re.sub(pattern, b'', new_stream)
+                if replaced != new_stream:
+                    new_stream = replaced
+                    modified = True
+
+            if modified:
+                self.file.update_stream(xref, new_stream)
+
+        except Exception:
+            pass
 
     def insert_image_at(self, page_index, img_data):
         self.save_snapshot(page_index)

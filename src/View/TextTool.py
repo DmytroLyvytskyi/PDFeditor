@@ -4,7 +4,7 @@ from PySide6.QtWidgets import QStyle
 from src.View.DraggableLineEdit import DraggableLineEdit
 from src.View.EditTextQLabel import EditTextQLabel
 from src.View.TextData import TextData
-from src.View.utils import calculate_x_offset, get_scale
+from src.View.utils import calculate_x_offset, get_scale, calculate_y_offset
 
 
 class TextTool:
@@ -43,23 +43,23 @@ class TextTool:
 
     def add_text_func(self, x, y, page_index):
         label = self.pages_QWidget[page_index]
-        if self.add_text != None:
+        if self.add_text is not None:
             try:
                 self.save_text(0, 0, self.add_text_page_index)
             except RuntimeError:
                 self.add_text = None
             return
         x_offset = calculate_x_offset(label)
+        y_offset = calculate_y_offset(label)
         scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         self.add_text = DraggableLineEdit(self.viewmodel, label)
         self.add_text_page_index = page_index
         self.add_text.scale_y = scale_y
         self.add_text.xref = self.viewmodel.current_font_xref
-        self.add_text.move(x + x_offset, y - self.add_text.height() / 2)
+        self.add_text.move(x + x_offset, y + y_offset - self.add_text.height() / 2)
         self.add_text.show()
         self.add_text.setFocus()
         self.add_text.returnPressed.connect(lambda: self.save_text(0, 0, self.add_text_page_index))
-        # without offset because pymupdf works with the coordinates of the file
         self.add_text.apply_change(
             self.viewmodel.current_font,
             self.viewmodel.current_fontsize,
@@ -94,20 +94,21 @@ class TextTool:
             return []
         label = self.pages_QWidget[page_index]
         x_offset = calculate_x_offset(label)
+        y_offset = calculate_y_offset(label)
         scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         padding = 5
         result = []
         for lbl in self.edit_labels[page_index]:
             text_data = lbl.text_data
             original_screen_x = int(int(lbl.bbox[0] * scale_x) + x_offset - padding)
-            original_screen_y = int((text_data.origin[1] - text_data.size) * scale_y)
+            original_screen_y = int((text_data.origin[1] - text_data.size) * scale_y) + y_offset
             delta_x = lbl.x() - original_screen_x
             delta_y = lbl.y() - original_screen_y
             pdf_x = text_data.origin[0] + delta_x / scale_x
             pdf_y = text_data.origin[1] + delta_y / scale_y
             color = text_data.color
             pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
-            result.append((pdf_x, pdf_y, text_data.text, text_data.font,text_data.size, pdf_color, text_data.xref))
+            result.append((pdf_x, pdf_y, text_data.text, text_data.font, text_data.size, pdf_color, text_data.xref))
         return result
 
     def save_text(self, x, y, page_index):
@@ -115,12 +116,13 @@ class TextTool:
         if text != "":
             label = self.pages_QWidget[page_index]
             x_offset = calculate_x_offset(label)
+            y_offset = calculate_y_offset(label)
             scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
             metrics = QFontMetrics(self.add_text.font())
             frame = self.add_text.style().pixelMetric(QStyle.PixelMetric.PM_DefaultFrameWidth)
             pdf_x = (self.add_text.x() + frame - x_offset) / scale_x
             text_top = (self.add_text.height() - metrics.height()) / 2
-            pdf_y = (self.add_text.y() + text_top + metrics.ascent()) / scale_y
+            pdf_y = (self.add_text.y() - y_offset + text_top + metrics.ascent()) / scale_y
             self.viewmodel.add_text(text, pdf_x, pdf_y, page_index, self.add_text.xref)
         self.add_text.deleteLater()
         self.add_text = None
@@ -154,6 +156,7 @@ class TextTool:
         padding = 5
         spans = self.viewmodel.get_spans_i(page_index)
         x_offset = calculate_x_offset(label)
+        y_offset = calculate_y_offset(label)
         page_labels = []
         scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         saved = self._saved_text_data.get(page_index, [])
@@ -170,7 +173,7 @@ class TextTool:
             edit_text = EditTextQLabel(text_data, width + 2 * padding, height + padding, bbox, self.viewmodel, label)
             edit_text.scale_x = scale_x
             edit_text.scale_y = scale_y
-            edit_text.move(left + x_offset - padding, top)
+            edit_text.move(left + x_offset - padding, top + y_offset)
             edit_text.coords.connect(lambda x, y, bbox, pi=page_index: self.move_text(pi))
             edit_text.selected.connect(lambda l=edit_text: self._on_label_selected(l))
             page_labels.append(edit_text)

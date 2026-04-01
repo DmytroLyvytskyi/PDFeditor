@@ -122,6 +122,16 @@ class ImageTool:
             widget.raise_()
             collection.append(widget)
 
+        blank_rects = []
+        for img in source_list:
+            bx = round(img['x'] * scale_x)
+            by = round(img['y'] * scale_y)
+            bw = round(img['w'] * scale_x)
+            bh = round(img['h'] * scale_y)
+            blank_rects.append((bx, by, bw, bh))
+        if blank_rects:
+            self.page_manager.rerender_page(page_index, blank_rects=blank_rects)
+
     def _make_edit_delete_callback(self, collection, page_index):
         def on_delete(w):
             if w in collection:
