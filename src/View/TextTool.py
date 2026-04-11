@@ -29,6 +29,7 @@ class TextTool:
             if page_index in self._dirty_pages and spans:
                 self.viewmodel.commit_text_moves(page_index, spans)
                 self._pending_spans.pop(page_index, None)
+                self._saved_text_data.pop(page_index, None)
             elif spans:
                 self._pending_spans[page_index] = spans
             self._saved_text_data[page_index] = [lbl.text_data for lbl in labels]

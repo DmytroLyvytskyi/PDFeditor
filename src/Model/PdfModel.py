@@ -114,12 +114,12 @@ class PdfModel:
         for block in blocks:
             if 'lines' not in block:
                 continue
-            has_null = any(
-                '\x00' in span['text']
+            has_renderable = any(
+                span['text'].replace('\x00', '').strip()
                 for line in block['lines']
                 for span in line['spans']
             )
-            if not has_null:
+            if has_renderable:
                 page.add_redact_annot(block['bbox'])
         page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
@@ -362,12 +362,12 @@ class PdfModel:
             for block in blocks:
                 if 'lines' not in block:
                     continue
-                has_null = any(
-                    '\x00' in span['text']
+                has_renderable = any(
+                    span['text'].replace('\x00', '').strip()
                     for line in block['lines']
                     for span in line['spans']
                 )
-                if not has_null:
+                if has_renderable:
                     page.add_redact_annot(block['bbox'], fill=())
             page.apply_redactions(
                 images=pymupdf.PDF_REDACT_IMAGE_NONE,
