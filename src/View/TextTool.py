@@ -14,7 +14,8 @@ class TextTool:
         self.page_manager = page_manager
         self.add_text = None
         self.edit_labels = {}
-        self._pending_spans= {}
+        self._pending_spans = {}
+        self._dirty_pages = set()
         self.add_text_page_index = None
         self.on_dirty = on_dirty
         self.on_label_selected = on_label_selected
@@ -25,7 +26,10 @@ class TextTool:
 
         for page_index, labels in self.edit_labels.items():
             spans = self._collect_current_pdf_spans(page_index)
-            if spans:
+            if page_index in self._dirty_pages and spans:
+                self.viewmodel.commit_text_moves(page_index, spans)
+                self._pending_spans.pop(page_index, None)
+            elif spans:
                 self._pending_spans[page_index] = spans
             self._saved_text_data[page_index] = [lbl.text_data for lbl in labels]
             for label in labels:
@@ -37,6 +41,7 @@ class TextTool:
                     label.edit_text = None
                 label.deleteLater()
         self.edit_labels.clear()
+        self._dirty_pages.clear()
 
         for page_index in pages_to_rerender:
             self.page_manager.rerender_page(page_index)
@@ -87,6 +92,7 @@ class TextTool:
                     pass
         self.edit_labels.clear()
         self._pending_spans.clear()
+        self._dirty_pages.clear()
         self._saved_text_data.clear()
 
     def _collect_current_pdf_spans(self, page_index):
@@ -134,6 +140,7 @@ class TextTool:
     def move_text(self, page_index):
         override_spans = self._collect_current_pdf_spans(page_index)
         self._pending_spans[page_index] = override_spans
+        self._dirty_pages.add(page_index)
         self.viewmodel.save_snapshot(page_index)
         self.page_manager.rerender_page(page_index, override_spans)
         if self.on_dirty:

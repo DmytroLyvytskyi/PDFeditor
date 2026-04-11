@@ -209,6 +209,18 @@ def category_from_font_name(font_name):
         return 'sans'
     return 'serif'
 
+def get_font_category(font_name):
+    try:
+        if os.path.isfile(font_name):
+            f = pymupdf.Font(fontfile=font_name)
+        elif font_name in _PYMUPDF_BUILTINS:
+            f = pymupdf.Font(fontname=font_name)
+        else:
+            return category_from_font_name(font_name)
+        return classify_font(f)
+    except Exception:
+        print(Exception)
+        return category_from_font_name(font_name)
 
 def get_bundled_font(category):
     fonts = {
@@ -229,26 +241,43 @@ def get_bundled_font(category):
 
 def resolve_font(font_cache, xref, text, font_name=None):
     data = font_cache.get(xref)
+    chars = [ch for ch in text if ch.strip() and ch != '\x00']
+
     if data is None and font_name and font_name in _PYMUPDF_BUILTINS:
         return None, font_name
 
     if data is not None:
-        chars = [ch for ch in text if ch.strip() and ch != '\x00']
-        if chars and all(ord(ch) in data['codepoints'] for ch in chars):
-            return data['tmp_path'], f"F{xref}"
-
+        category = data.get('category', 'serif')
+    elif font_name:
+        category = get_font_category(font_name)
+    else:
+        category = 'serif'
     if data is not None:
-        system_path = find_system_font_for_pdf_font(data)
-        if system_path:
-            try:
-                f = pymupdf.Font(fontfile=system_path)
-                chars = [ch for ch in text if ch.strip() and ch != '\x00']
-                if not chars or all(f.has_glyph(ord(ch)) > 0 for ch in chars):
-
-                    return system_path, f"Fs{xref}"
-            except Exception:
-                pass
-
+        font_obj = data.get('font_obj')
+        tmp_path = data.get('tmp_path')
+        if font_obj and tmp_path and os.path.isfile(tmp_path):
+            if '_pdf_usable' not in data:
+                data['_pdf_usable'] = font_obj.has_glyph(ord('a')) > 0
+            if data['_pdf_usable']:
+                if not chars or all(font_obj.has_glyph(ord(ch)) > 0 for ch in chars):
+                    return tmp_path, f"Fp{xref}"
+    if data is not None:
+        if '_sys_path' not in data:
+            sp = find_system_font_for_pdf_font(data)
+            data['_sys_path'] = sp
+            if sp:
+                try:
+                    data['_sys_font'] = pymupdf.Font(fontfile=sp)
+                except Exception:
+                    data['_sys_path'] = None
+                    data['_sys_font'] = None
+            else:
+                data['_sys_font'] = None
+        system_path = data['_sys_path']
+        sys_font = data.get('_sys_font')
+        if system_path and sys_font:
+            if not chars or all(sys_font.has_glyph(ord(ch)) > 0 for ch in chars):
+                return system_path, f"Fs{xref}"
     if data is None and font_name:
         if os.path.isfile(font_name):
             return font_name, "Fpath"
@@ -256,22 +285,18 @@ def resolve_font(font_cache, xref, text, font_name=None):
         if system_path:
             try:
                 f = pymupdf.Font(fontfile=system_path)
-                chars = [ch for ch in text if ch.strip() and ch != '\x00']
                 if not chars or all(f.has_glyph(ord(ch)) > 0 for ch in chars):
-
                     return system_path, "Fsn"
             except Exception:
                 pass
-
-    if data is not None:
-        category = data.get('category', 'serif')
-    elif font_name:
-        category = category_from_font_name(font_name)
-    else:
-        category = 'serif'
     bundled_path = get_bundled_font(category)
     if bundled_path:
-        return bundled_path, f"Fb{xref}"
+        try:
+            f = pymupdf.Font(fontfile=bundled_path)
+            if not chars or all(f.has_glyph(ord(ch)) > 0 for ch in chars):
+                return bundled_path, f"Fb{xref}"
+        except Exception:
+            pass
     system_path = find_system_font_by_category(category)
     if system_path:
         return system_path, f"Fsc{xref}"

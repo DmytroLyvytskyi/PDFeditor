@@ -103,19 +103,25 @@ class PdfModel:
         for name, xrefs in name_to_xrefs.items():
             if len(xrefs) <= 1:
                 continue
-            canonical = xrefs[0]
-            for other_xref in xrefs[1:]:
-                self.font_cache[canonical]['codepoints'].update(
-                    self.font_cache[other_xref]['codepoints']
-                )
-                self.font_cache[other_xref] = self.font_cache[canonical]
+            all_codepoints = set()
+            for xref in xrefs:
+                all_codepoints.update(self.font_cache[xref]['codepoints'])
+            for xref in xrefs:
+                self.font_cache[xref]['codepoints'] = all_codepoints
 
     def _full_redraw(self, page, override_spans):
         blocks = page.get_text("dict")["blocks"]
         for block in blocks:
-            if 'lines' in block:
+            if 'lines' not in block:
+                continue
+            has_null = any(
+                '\x00' in span['text']
+                for line in block['lines']
+                for span in line['spans']
+            )
+            if not has_null:
                 page.add_redact_annot(block['bbox'])
-        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
             clean_text = text.replace('\x00', '')
             if clean_text.strip():
@@ -126,17 +132,31 @@ class PdfModel:
                     existing = self._fontname_info.get(real_name)
                     if existing is None or existing[0] == 0:
                         self._fontname_info[real_name] = (xref, font)
-                if tmp_path:
-                    page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                     fontfile=tmp_path, fontname=fontname, color=pdf_color)
-                else:
-                    page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                     fontname=fontname, color=pdf_color)
+                try:
+                    if tmp_path:
+                        page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                         fontfile=tmp_path, fontname=fontname, color=pdf_color)
+                    else:
+                        page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                         fontname=fontname, color=pdf_color)
+                except Exception:
+                    try:
+                        page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                         fontname='tiro', color=pdf_color)
+                    except Exception:
+                        pass
 
     def render_page(self, num, override_spans=None, zoom=1.0):
-        page = self.file[num]
         if override_spans is not None:
-            self._full_redraw(page, override_spans)
+            tmp = pymupdf.open()
+            tmp.insert_pdf(self.file, from_page=num, to_page=num)
+            tmp_page = tmp[0]
+            self._full_redraw(tmp_page, override_spans)
+            matrix = pymupdf.Matrix(zoom, zoom)
+            pix = tmp_page.get_pixmap(matrix=matrix)
+            tmp.close()
+            return pix
+        page = self.file[num]
         matrix = pymupdf.Matrix(zoom, zoom)
         return page.get_pixmap(matrix=matrix)
 
@@ -299,7 +319,7 @@ class PdfModel:
                 for key, spans_list in groups:
                     size_val, font_base, r, g, b, xref = key
                     merged_text = ''.join(s['text'] for s in spans_list)
-                    if not merged_text.strip():
+                    if not merged_text.replace('\x00', '').strip():
                         continue
                     qcolor = QColor(r, g, b)
                     first = spans_list[0]
@@ -340,15 +360,23 @@ class PdfModel:
         if text_spans is not None:
             blocks = page.get_text("dict")["blocks"]
             for block in blocks:
-                if 'lines' in block:
+                if 'lines' not in block:
+                    continue
+                has_null = any(
+                    '\x00' in span['text']
+                    for line in block['lines']
+                    for span in line['spans']
+                )
+                if not has_null:
                     page.add_redact_annot(block['bbox'], fill=())
             page.apply_redactions(
                 images=pymupdf.PDF_REDACT_IMAGE_NONE,
                 graphics=pymupdf.PDF_REDACT_LINE_ART_NONE
             )
             for x, y, text, font, fontsize, pdf_color, xref in text_spans:
-                if text.strip():
-                    tmp_path, fontname = resolve_font(self.font_cache, xref, text, font_name=font)
+                clean_text = text.replace('\x00', '')
+                if clean_text.strip():
+                    tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
                     self._fontname_info[fontname] = (xref, font)
                     if xref in self.font_cache:
                         real_name = self.font_cache[xref]['name']
@@ -357,13 +385,17 @@ class PdfModel:
                             self._fontname_info[real_name] = (xref, font)
                     try:
                         if tmp_path:
-                            page.insert_text((x, y), text, fontsize=fontsize,
+                            page.insert_text((x, y), clean_text, fontsize=fontsize,
                                              fontfile=tmp_path, fontname=fontname, color=pdf_color)
                         else:
-                            page.insert_text((x, y), text, fontsize=fontsize,
+                            page.insert_text((x, y), clean_text, fontsize=fontsize,
                                              fontname=fontname, color=pdf_color)
                     except Exception:
-                        pass
+                        try:
+                            page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                             fontname='tiro', color=pdf_color)
+                        except Exception:
+                            pass
 
         self._page_spans_cache.pop(page.number, None)
         self.insert_images(page, images)
@@ -430,12 +462,13 @@ class PdfModel:
                     pass
 
             try:
-                orig_bytes = None
                 if xref and xref > 0:
                     img_data = self.file.extract_image(xref)
                     smask = img_data.get("smask", 0)
                     if smask and smask > 0:
                         base_pix = pymupdf.Pixmap(self.file, xref)
+                        if base_pix.alpha:
+                            base_pix = pymupdf.Pixmap(base_pix, 0)
                         mask_pix = pymupdf.Pixmap(self.file, smask)
                         pix = pymupdf.Pixmap(base_pix, mask_pix)
                         orig_bytes = pix.tobytes("png")

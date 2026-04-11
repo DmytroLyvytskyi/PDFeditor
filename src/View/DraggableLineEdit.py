@@ -4,7 +4,8 @@ from PySide6.QtCore import Qt, QPoint, QTimer, Signal
 from PySide6.QtGui import QFont, QFontMetrics, QFontDatabase
 from PySide6.QtWidgets import QWidget, QLineEdit, QMessageBox, QApplication
 
-from src.View.utils import find_system_font_by_category, find_system_font, category_from_font_name, pymupdf_fonts
+from src.View.utils import find_system_font_by_category, find_system_font, pymupdf_fonts, \
+    get_font_category
 
 
 class DraggableLineEdit(QLineEdit):
@@ -105,7 +106,7 @@ class DraggableLineEdit(QLineEdit):
                                     fallback_path = find_system_font_by_category(category)
                             else:
                                 cur_font = self.viewmodel.current_font
-                                category = category_from_font_name(cur_font)
+                                category = get_font_category(cur_font)
                                 fallback_path = find_system_font(cur_font)
                                 if not fallback_path:
                                     fallback_path = find_system_font_by_category(category)

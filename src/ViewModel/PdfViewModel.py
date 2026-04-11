@@ -206,6 +206,10 @@ class PdfViewModel(QObject):
     def can_redo(self):
         return self.Model.can_redo()
 
+    def commit_text_moves(self, page_index, spans):
+        self.Model._full_redraw(self.Model.file[page_index], spans)
+        self.Model._page_spans_cache.pop(page_index, None)
+
     def save_snapshot(self, page_index=None):
         if page_index is None:
             page_index = self.current_page

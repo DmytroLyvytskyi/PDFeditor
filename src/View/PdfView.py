@@ -10,6 +10,7 @@ from src.View.EditTextQLabel import EditTextQLabel
 from src.View.ImageTool import ImageTool
 from src.View.PageManager import PageManager
 from src.View.TextTool import TextTool
+from src.View.utils import get_font_category, pymupdf_fonts, find_system_font_by_category
 from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
 _HELP_TEXTS = {
@@ -536,15 +537,11 @@ class PdfView(QMainWindow):
                         self._restore_font_combo(prev_xref, prev_font)
                         return
 
-                    from src.View.utils import pymupdf_fonts, category_from_font_name
-
                     new_data = self.viewmodel.Model.font_cache.get(new_xref)
                     if new_data:
                         category = new_data.get('category', 'serif')
                     else:
-                        category = category_from_font_name(new_font)
-
-                    from src.View.utils import find_system_font_by_category
+                        category = get_font_category(new_font)
                     similar_font_path = find_system_font_by_category(category, original_name=text)
                     if similar_font_path:
                         similar_font = similar_font_path
