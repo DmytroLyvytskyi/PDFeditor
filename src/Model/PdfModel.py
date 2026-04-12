@@ -7,6 +7,9 @@ import pymupdf
 from PySide6.QtGui import QColor
 from src.View.utils import classify_font, resolve_font
 
+_FONTS_DIR = os.path.join(tempfile.gettempdir(), 'pdfeditor_fonts')
+_ORIGINALS_DIR = os.path.join(_FONTS_DIR, 'originals')
+
 class PdfModel:
     def __init__(self):
         self.file = None
@@ -17,6 +20,7 @@ class PdfModel:
         self._fontname_info = {}
         self._undo_stack = []
         self._redo_stack = []
+        self._redraw_id = 0
         atexit.register(self.cleanup)
 
     def save_snapshot(self, page_index):
@@ -48,7 +52,7 @@ class PdfModel:
         self.total = len(self.file)
 
     def _extract_all_fonts(self):
-        os.makedirs("fonts", exist_ok=True)
+        os.makedirs(_FONTS_DIR, exist_ok=True)
         visited = set()
 
         for page_index in range(len(self.file)):
@@ -70,7 +74,7 @@ class PdfModel:
                     if not font_bytes:
                         continue
                     name = base
-                    tmp_path = f"fonts/pdf_font_{xref}.bin"
+                    tmp_path = os.path.join(_FONTS_DIR, f"pdf_font_{xref}.bin")
                     with open(tmp_path, 'wb') as fp:
                         fp.write(font_bytes)
                     f = pymupdf.Font(fontbuffer=font_bytes)
@@ -109,7 +113,14 @@ class PdfModel:
             for xref in xrefs:
                 self.font_cache[xref]['codepoints'] = all_codepoints
 
+        for xref, data in self.font_cache.items():
+            name = data['name']
+            if name not in self._fontname_info:
+                self._fontname_info[name] = (xref, name)
+
     def _full_redraw(self, page, override_spans):
+        self._redraw_id += 1
+        rid = self._redraw_id
         blocks = page.get_text("dict")["blocks"]
         for block in blocks:
             if 'lines' not in block:
@@ -126,6 +137,8 @@ class PdfModel:
             clean_text = text.replace('\x00', '')
             if clean_text.strip():
                 tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
+                if tmp_path:
+                    fontname = f"{fontname}r{rid}"
                 self._fontname_info[fontname] = (xref, font)
                 if xref in self.font_cache:
                     real_name = self.font_cache[xref]['name']
@@ -209,6 +222,9 @@ class PdfModel:
         page = self.file[page_index]
         pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
         tmp_path, fontname = resolve_font(self.font_cache, xref, text, font_name=font)
+        if tmp_path:
+            self._redraw_id += 1
+            fontname = f"{fontname}r{self._redraw_id}"
         self._fontname_info[fontname] = (xref, font)
         if xref in self.font_cache:
             real_name = self.font_cache[xref]['name']
@@ -261,30 +277,16 @@ class PdfModel:
         return blocks
 
     def get_spans_i(self, page_index):
-        """
-        Get text data from PDF
-
-        Args:
-            page_index (int): index of page
-
-        Returns:
-            list: A list of elements:
-            [
-                font_size (float),
-                font_name (PyMuPDF),
-                color (QColor),
-                text (str),
-                bbox (tuple)
-            ]
-        """
         font_xref_map = {}
         for font in self.file[page_index].get_fonts(full=True):
             new_xref = font[0]
             subset = font[3]
             base = subset.split('+')[-1] if '+' in subset else subset
-            if base in self._fontname_info:
-                original_xref, original_font_name = self._fontname_info[base]
+            info = self._fontname_info.get(base) or self._fontname_info.get(font[4])
+            if info:
+                original_xref, original_font_name = info
                 font_xref_map[base] = original_xref
+                font_xref_map[font[4]] = original_xref
                 font_xref_map[original_font_name] = original_xref
                 if original_xref in self.font_cache:
                     font_xref_map[self.font_cache[original_xref]['name']] = original_xref
@@ -318,8 +320,8 @@ class PdfModel:
                         groups.append((key, [span]))
                 for key, spans_list in groups:
                     size_val, font_base, r, g, b, xref = key
-                    merged_text = ''.join(s['text'] for s in spans_list)
-                    if not merged_text.replace('\x00', '').strip():
+                    merged_text = ''.join(s['text'] for s in spans_list).replace('\x00', ' ')
+                    if not merged_text.strip():
                         continue
                     qcolor = QColor(r, g, b)
                     first = spans_list[0]
@@ -358,6 +360,8 @@ class PdfModel:
         self.save_snapshot(page.number)
         self._remove_images_from_content_stream(page)
         if text_spans is not None:
+            self._redraw_id += 1
+            rid = self._redraw_id
             blocks = page.get_text("dict")["blocks"]
             for block in blocks:
                 if 'lines' not in block:
@@ -377,6 +381,8 @@ class PdfModel:
                 clean_text = text.replace('\x00', '')
                 if clean_text.strip():
                     tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
+                    if tmp_path:
+                        fontname = f"{fontname}r{rid}"
                     self._fontname_info[fontname] = (xref, font)
                     if xref in self.font_cache:
                         real_name = self.font_cache[xref]['name']
@@ -402,12 +408,12 @@ class PdfModel:
         self._cleanup_rotated_temps()
 
     def _cleanup_rotated_temps(self):
-        if not os.path.exists("fonts"):
+        if not os.path.exists(_FONTS_DIR):
             return
-        for f in os.listdir("fonts"):
+        for f in os.listdir(_FONTS_DIR):
             if f.startswith("rotated_"):
                 try:
-                    os.remove(os.path.join("fonts", f))
+                    os.remove(os.path.join(_FONTS_DIR, f))
                 except Exception:
                     pass
 
@@ -444,8 +450,8 @@ class PdfModel:
     def get_images_i(self, page_index):
         page = self.file[page_index]
         result = []
-        os.makedirs("fonts", exist_ok=True)
-        os.makedirs("fonts/originals", exist_ok=True)
+        os.makedirs(_FONTS_DIR, exist_ok=True)
+        os.makedirs(_ORIGINALS_DIR, exist_ok=True)
 
         overlay_map = self._detect_image_overlay(page)
 
@@ -474,13 +480,13 @@ class PdfModel:
                         orig_bytes = pix.tobytes("png")
                     else:
                         orig_bytes = img_data['image']
-                    orig_key = f"fonts/originals/img_{xref}.png"
+                    orig_key = os.path.join(_ORIGINALS_DIR, f"img_{xref}.png")
                 else:
                     clip = pymupdf.Rect(bbox)
                     pix = page.get_pixmap(matrix=pymupdf.Matrix(1, 1), clip=clip, alpha=True)
                     orig_bytes = pix.tobytes("png")
                     h = hashlib.md5(orig_bytes).hexdigest()[:12]
-                    orig_key = f"fonts/originals/img_inline_{h}.png"
+                    orig_key = os.path.join(_ORIGINALS_DIR, f"img_inline_{h}.png")
 
                 if orig_bytes and not os.path.exists(orig_key):
                     with open(orig_key, 'wb') as fp:
@@ -560,10 +566,10 @@ class PdfModel:
 
     def cleanup(self):
         self._image_originals.clear()
-        if not os.path.exists("fonts"):
+        if not os.path.exists(_FONTS_DIR):
             return
-        for f in os.listdir("fonts"):
-            path = os.path.join("fonts", f)
+        for f in os.listdir(_FONTS_DIR):
+            path = os.path.join(_FONTS_DIR, f)
             if os.path.isfile(path):
                 os.remove(path)
 
@@ -574,7 +580,7 @@ class PdfModel:
             from PIL import Image
             img = Image.open(img_path).convert("RGBA")
             rotated = img.rotate(-rotation, expand=True, resample=Image.BICUBIC)
-            tmp_path = f"fonts/rotated_{int(rotation % 360)}_{os.path.basename(img_path)}.png"
+            tmp_path = os.path.join(_FONTS_DIR, f"rotated_{int(rotation % 360)}_{os.path.basename(img_path)}.png")
             rotated.save(tmp_path)
             return tmp_path
         except Exception:
@@ -596,7 +602,6 @@ class PdfModel:
         self.file.insert_pdf(restored, from_page=0, to_page=0, start_at=pi)
         restored.close()
         self._page_spans_cache.pop(pi, None)
-        self._fontname_info.clear()
         return pi
 
     def undo(self):
