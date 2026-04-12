@@ -891,6 +891,7 @@ class PdfView(QMainWindow):
         actual_page = self.viewmodel.undo()
         if actual_page >= 0:
             self.text_tool._saved_text_data.pop(actual_page, None)
+            self.text_tool._pending_spans.pop(actual_page, None)
             self.page_manager.rerender_page(actual_page)
             if self.viewmodel.mode == EditorMode.EDIT_TEXT:
                 self.text_tool.prepare_edit_mode_i(actual_page)
@@ -906,6 +907,7 @@ class PdfView(QMainWindow):
         actual_page = self.viewmodel.redo()
         if actual_page >= 0:
             self.text_tool._saved_text_data.pop(actual_page, None)
+            self.text_tool._pending_spans.pop(actual_page, None)
             self.page_manager.rerender_page(actual_page)
             if self.viewmodel.mode == EditorMode.EDIT_TEXT:
                 self.text_tool.prepare_edit_mode_i(actual_page)
