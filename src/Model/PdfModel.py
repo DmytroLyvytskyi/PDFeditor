@@ -6,6 +6,8 @@ import tempfile
 import pymupdf
 from PySide6.QtGui import QColor
 from src.View.utils import classify_font, resolve_font
+import re
+from PIL import Image
 
 _FONTS_DIR = os.path.join(tempfile.gettempdir(), 'pdfeditor_fonts')
 _ORIGINALS_DIR = os.path.join(_FONTS_DIR, 'originals')
@@ -113,10 +115,6 @@ class PdfModel:
             for xref in xrefs:
                 self.font_cache[xref]['codepoints'] = all_codepoints
 
-        for xref, data in self.font_cache.items():
-            name = data['name']
-            if name not in self._fontname_info:
-                self._fontname_info[name] = (xref, name)
 
     def _full_redraw(self, page, override_spans):
         self._redraw_id += 1
@@ -185,13 +183,17 @@ class PdfModel:
             fd, tmp_path = tempfile.mkstemp(suffix='.pdf')
             os.close(fd)
             try:
-                self.file.save(tmp_path, garbage=4, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                self.file.save(path, incremental=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
                 self.file.close()
-                shutil.move(tmp_path, path)
-            except Exception:
-                if os.path.exists(tmp_path):
-                    os.remove(tmp_path)
-                raise
+            except:
+                try:
+                    self.file.save(tmp_path, garbage=4, deflate=True, encryption=pymupdf.PDF_ENCRYPT_KEEP)
+                    self.file.close()
+                    shutil.move(tmp_path, path)
+                except Exception:
+                    if os.path.exists(tmp_path):
+                        os.remove(tmp_path)
+                    raise
             self.file = pymupdf.open(path)
             self._undo_stack.clear()
             self._redo_stack.clear()
@@ -418,7 +420,6 @@ class PdfModel:
                     pass
 
     def _detect_image_overlay(self, page):
-        import re
         result = {}
         try:
             xref_to_name = {}
@@ -504,7 +505,6 @@ class PdfModel:
         return result
 
     def _remove_images_from_content_stream(self, page):
-        import re
         try:
             image_names = set()
             for img in page.get_images(full=True):
@@ -573,11 +573,16 @@ class PdfModel:
             if os.path.isfile(path):
                 os.remove(path)
 
+        if os.path.exists(_ORIGINALS_DIR):
+            for f in os.listdir(_ORIGINALS_DIR):
+                path = os.path.join(_ORIGINALS_DIR, f)
+                if os.path.isfile(path):
+                    os.remove(path)
+
     def _get_rotated_image_path(self, img_path, rotation):
         if rotation % 360 == 0:
             return img_path
         try:
-            from PIL import Image
             img = Image.open(img_path).convert("RGBA")
             rotated = img.rotate(-rotation, expand=True, resample=Image.BICUBIC)
             tmp_path = os.path.join(_FONTS_DIR, f"rotated_{int(rotation % 360)}_{os.path.basename(img_path)}.png")
@@ -589,7 +594,42 @@ class PdfModel:
     def _insert_single_image(self, page, img):
         rect = pymupdf.Rect(img.x, img.y, img.x + img.width, img.y + img.height)
         path = self._get_rotated_image_path(img.original_path, img.rotation)
-        page.insert_image(rect, filename=path, overlay=img.overlay, keep_proportion=False)
+        if img.overlay:
+            page.insert_image(rect, filename=path, overlay=True, keep_proportion=False)
+            return
+        before_xrefs = set(page.get_contents())
+        page.insert_image(rect, filename=path, overlay=True, keep_proportion=False)
+        after_contents = page.get_contents()
+        new_xrefs = [x for x in after_contents if x not in before_xrefs]
+        img_cmd = None
+        for xref in new_xrefs:
+            s = self.file.xref_stream(xref)
+            if s and re.search(rb'/\w+\s+Do', s):
+                img_cmd = s.strip()
+                break
+
+        if img_cmd:
+            for c_xref in after_contents:
+                if c_xref not in before_xrefs:
+                    continue
+                s = self.file.xref_stream(c_xref)
+                if not s:
+                    continue
+                bt = re.search(rb'\bBT\b', s)
+                if not bt:
+                    continue
+                self.file.update_stream(
+                    c_xref, s[:bt.start()] + img_cmd + b'\n' + s[bt.start():]
+                )
+                break
+
+        original = [x for x in after_contents if x in before_xrefs]
+        if original and new_xrefs:
+            if len(original) == 1:
+                self.file.xref_set_key(page.xref, 'Contents', f'{original[0]} 0 R')
+            else:
+                arr = ' '.join(f'{x} 0 R' for x in original)
+                self.file.xref_set_key(page.xref, 'Contents', f'[{arr}]')
 
     def _apply_history_entry(self, entry, target_stack):
         pi = entry['page']

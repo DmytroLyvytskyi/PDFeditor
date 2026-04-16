@@ -256,9 +256,11 @@ def resolve_font(font_cache, xref, text, font_name=None):
         font_obj = data.get('font_obj')
         tmp_path = data.get('tmp_path')
         if font_obj and tmp_path and os.path.isfile(tmp_path):
-            codepoints = data.get('codepoints', set())
-            if not chars or all(ord(ch) in codepoints or font_obj.has_glyph(ord(ch)) > 0 for ch in chars):
-                return tmp_path, f"Fp{xref}"
+            if '_pdf_usable' not in data:
+                data['_pdf_usable'] = font_obj.has_glyph(ord('a')) > 0
+            if data['_pdf_usable']:
+                if not chars or all(font_obj.has_glyph(ord(ch)) > 0 for ch in chars):
+                    return tmp_path, f"Fp{xref}"
     if data is not None:
         if '_sys_path' not in data:
             sp = find_system_font_for_pdf_font(data)
