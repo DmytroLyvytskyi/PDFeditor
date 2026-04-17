@@ -80,10 +80,12 @@ class PdfModel:
                     with open(tmp_path, 'wb') as fp:
                         fp.write(font_bytes)
                     f = pymupdf.Font(fontbuffer=font_bytes)
+                    font_type = font[2]
                     self.font_cache[xref] = {
                         'codepoints': set(), 'tmp_path': tmp_path,
                         'name': name, 'category': classify_font(f),
-                        'font_obj': f
+                        'font_obj': f,
+                        '_pdf_usable': font_type != 'Type0',
                     }
                 except Exception:
                     continue
@@ -132,7 +134,7 @@ class PdfModel:
                 page.add_redact_annot(block['bbox'])
         page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
-            clean_text = text.replace('\x00', '')
+            clean_text = text.replace('\x00', '').replace('\xad', '-')
             if clean_text.strip():
                 tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
                 if tmp_path:
@@ -322,7 +324,7 @@ class PdfModel:
                         groups.append((key, [span]))
                 for key, spans_list in groups:
                     size_val, font_base, r, g, b, xref = key
-                    merged_text = ''.join(s['text'] for s in spans_list).replace('\x00', ' ')
+                    merged_text = ''.join(s['text'] for s in spans_list).replace('\x00', ' ').replace('\xad', '-')
                     if not merged_text.strip():
                         continue
                     qcolor = QColor(r, g, b)
