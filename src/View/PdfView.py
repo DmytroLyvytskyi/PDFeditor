@@ -341,16 +341,16 @@ class PdfView(QMainWindow):
                     if not isinstance(QApplication.focusWidget(), QLineEdit):
                         self.text_tool.commit_selected()
                         return True
-            if self.viewmodel.mode == EditorMode.ADD_IMAGE:
-                self.image_tool.commit_all()
-                self.ui.actionView.setChecked(True)
-                self.viewmodel.set_mode(EditorMode.VIEW)
-                return True
-            if self.viewmodel.mode == EditorMode.EDIT_IMAGE:
-                self.image_tool.commit_edit_images()
-                self.ui.actionView.setChecked(True)
-                self.viewmodel.set_mode(EditorMode.VIEW)
-                return True
+                if self.viewmodel.mode == EditorMode.ADD_IMAGE:
+                    self.image_tool.commit_all()
+                    self.ui.actionView.setChecked(True)
+                    self.viewmodel.set_mode(EditorMode.VIEW)
+                    return True
+                if self.viewmodel.mode == EditorMode.EDIT_IMAGE:
+                    self.image_tool.commit_edit_images()
+                    self.ui.actionView.setChecked(True)
+                    self.viewmodel.set_mode(EditorMode.VIEW)
+                    return True
 
             if key in (Qt.Key.Key_Delete, Qt.Key.Key_Backspace):
                 focused = QApplication.focusWidget()
@@ -892,6 +892,7 @@ class PdfView(QMainWindow):
         if actual_page >= 0:
             self.text_tool._saved_text_data.pop(actual_page, None)
             self.text_tool._pending_spans.pop(actual_page, None)
+            self.image_tool.committed_images.pop(actual_page, None)
             self.page_manager.rerender_page(actual_page)
             if self.viewmodel.mode == EditorMode.EDIT_TEXT:
                 self.text_tool.prepare_edit_mode_i(actual_page)
@@ -908,6 +909,7 @@ class PdfView(QMainWindow):
         if actual_page >= 0:
             self.text_tool._saved_text_data.pop(actual_page, None)
             self.text_tool._pending_spans.pop(actual_page, None)
+            self.image_tool.committed_images.pop(actual_page, None)
             self.page_manager.rerender_page(actual_page)
             if self.viewmodel.mode == EditorMode.EDIT_TEXT:
                 self.text_tool.prepare_edit_mode_i(actual_page)
