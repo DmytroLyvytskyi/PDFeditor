@@ -31,7 +31,12 @@ class PdfModel:
             tmp.insert_pdf(self.file, from_page=page_index, to_page=page_index)
             data = tmp.tobytes(garbage=4, deflate=True)
             tmp.close()
-            self._undo_stack.append({'page': page_index, 'data': data})
+            data_hash = hashlib.md5(data).digest()
+            if (self._undo_stack
+                    and self._undo_stack[-1]['page'] == page_index
+                    and self._undo_stack[-1].get('hash') == data_hash):
+                return
+            self._undo_stack.append({'page': page_index, 'data': data, 'hash': data_hash})
             self._redo_stack.clear()
             if len(self._undo_stack) > 20:
                 self._undo_stack.pop(0)
@@ -361,7 +366,6 @@ class PdfModel:
 
 
     def full_redraw_images(self, page, images, text_spans=None):
-        self.save_snapshot(page.number)
         self._remove_images_from_content_stream(page)
         if text_spans is not None:
             self._redraw_id += 1
@@ -661,7 +665,8 @@ class PdfModel:
 
     def can_redo(self):
         return bool(self.file and self._redo_stack)
-    
+        return bool(self.file and self._redo_stack)
+
     def close_file(self):
         self.file.close() if self.file else None
         self.file = None

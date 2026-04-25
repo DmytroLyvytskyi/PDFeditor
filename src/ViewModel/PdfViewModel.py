@@ -75,10 +75,12 @@ class PdfViewModel(QObject):
         data = self.Model.font_cache.get(xref)
         if data is None:
             return True
+        if ord(char) in data['codepoints']:
+            return True
         font_obj = data.get('font_obj')
         if font_obj is not None:
             return font_obj.has_glyph(ord(char)) > 0
-        return ord(char) in data['codepoints']
+        return False
 
     def save_file(self, path, override_spans_pages=None, override_images_pages=None):
         self.Model.save_file(path, override_spans_pages, override_images_pages)

@@ -7,6 +7,7 @@ from PySide6.QtWidgets import QLabel, QMenu
 
 class DraggableImage(QLabel):
     selected = Signal(object)
+    moved = Signal(object)
 
     def __init__(self, path, x, y, w, h, overlay=True, on_delete=None, parent=None):
         super().__init__(parent)
@@ -132,9 +133,12 @@ class DraggableImage(QLabel):
         super().mouseMoveEvent(event)
 
     def mouseReleaseEvent(self, event):
+        was_active = self._drag or self._resize
         self._drag = False
         self._resize = False
         self.setCursor(Qt.SizeAllCursor)
+        if was_active:
+            self.moved.emit(self)
         super().mouseReleaseEvent(event)
 
     def contextMenuEvent(self, event):

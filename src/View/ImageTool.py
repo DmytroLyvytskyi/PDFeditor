@@ -16,6 +16,7 @@ class ImageTool:
         self.drag_images = {}
         self.committed_images = {}
         self.edit_images = {}
+        self._dirty_pages = set()
         self.overlay = True
         self.selected_image = None
         self.on_dirty = on_dirty
@@ -119,6 +120,7 @@ class ImageTool:
 
             self._setup_widget_base_size(widget, screen_w, screen_h)
             widget.selected.connect(self._on_image_selected)
+            widget.moved.connect(lambda w, pi=page_index: self._dirty_pages.add(pi))
             widget.raise_()
             collection.append(widget)
 
@@ -155,6 +157,8 @@ class ImageTool:
             if not widgets:
                 continue
             page_images = [self._widget_to_image_data(w, page_index) for w in widgets]
+            if page_index in self._dirty_pages:
+                self.viewmodel.save_snapshot(page_index)
             self.viewmodel.commit_image_edit(page_index, page_images)
             self.committed_images[page_index] = page_images
             for w in widgets:
@@ -164,6 +168,7 @@ class ImageTool:
                     pass
             self.page_manager.rerender_page(page_index)
         self.edit_images.clear()
+        self._dirty_pages.clear()
         if self.on_dirty:
             self.on_dirty()
 
@@ -234,8 +239,10 @@ class ImageTool:
     def _recommit_page_to_pdf(self, page_index):
         widgets = self.edit_images.get(page_index, [])
         page_images = [self._widget_to_image_data(w, page_index) for w in widgets]
+        self.viewmodel.save_snapshot(page_index)
         self.viewmodel.commit_image_edit(page_index, page_images)
         self.committed_images[page_index] = page_images
+        self._dirty_pages.discard(page_index)
         self.page_manager.rerender_page(page_index)
 
 

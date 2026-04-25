@@ -13,6 +13,7 @@ class EditTextQLabel(QLabel):
     def __init__(self,text_data,width,height,bbox,viewmodel, parent=None):
         super().__init__(parent)
         self.drag = False
+        self._moved = False
         self.edit_text = None
         self.offset = QPoint(0, 0)
         self.text_data = text_data
@@ -27,6 +28,7 @@ class EditTextQLabel(QLabel):
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
             self.drag = True
+            self._moved = False
             self.offset = event.pos() # event.pos -> position relative to the widget that was clicked
             self.setStyleSheet("border: 2px solid gray; background-color: rgba(137, 207, 240, 100);")
             self.selected.emit(self)
@@ -38,6 +40,7 @@ class EditTextQLabel(QLabel):
 
     def mouseMoveEvent(self, event):
         if self.drag:
+            self._moved = True
             self.move(self.mapToParent(event.pos() - self.offset))
             # mapToParent -> position relative to the parent widget
         else:
@@ -46,7 +49,9 @@ class EditTextQLabel(QLabel):
     def mouseReleaseEvent(self, event):
         self.drag = False
         self.setStyleSheet("border: 2px solid gray; background: transparent;")
-        self.coords.emit(self.x(), self.y(), self.bbox)
+        if self._moved:
+            self.coords.emit(self.x(), self.y(), self.bbox)
+        self._moved = False
         super().mouseReleaseEvent(event)
 
     def mouseDoubleClickEvent(self, event):
