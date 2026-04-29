@@ -30,8 +30,6 @@ class TextTool:
                 self.viewmodel.commit_text_moves(page_index, spans)
                 self._pending_spans.pop(page_index, None)
                 self._saved_text_data.pop(page_index, None)
-            elif spans:
-                self._pending_spans[page_index] = spans
             self._saved_text_data[page_index] = [lbl.text_data for lbl in labels]
             for label in labels:
                 if label.edit_text is not None:
@@ -148,10 +146,11 @@ class TextTool:
             self.on_dirty()
 
     def get_override_spans_for_save(self):
-        for page_index in self.edit_labels:
-            spans = self._collect_current_pdf_spans(page_index)
-            if spans:
-                self._pending_spans[page_index] = spans
+        for page_index in self._dirty_pages:
+            if page_index in self.edit_labels:
+                spans = self._collect_current_pdf_spans(page_index)
+                if spans:
+                    self._pending_spans[page_index] = spans
         result = {pi: spans for pi, spans in self._pending_spans.items() if spans}
         return result if result else None
 
@@ -195,8 +194,10 @@ class TextTool:
     def _on_label_selected(self, label):
         if self.add_text is not None and isinstance(self.add_text, EditTextQLabel) and self.add_text is not label:
             page_index = self._find_label_page(self.add_text)
-            if page_index is not None:
-                self.move_text(page_index)
+            if page_index is not None and page_index in self._dirty_pages:
+                spans = self._collect_current_pdf_spans(page_index)
+                if spans:
+                    self._pending_spans[page_index] = spans
         self.add_text = label
         if self.on_label_selected:
             self.on_label_selected(label)

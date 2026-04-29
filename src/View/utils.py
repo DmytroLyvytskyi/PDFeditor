@@ -26,6 +26,12 @@ _ALIASES = {
     'msserif':     'timesnewroman',
     'system':      'arial',
     'fixedsys':    'couriernew',
+    'cmr6': 'lmroman6regular', 'cmr7': 'lmroman7regular',
+    'cmr8': 'lmroman8regular', 'cmr9': 'lmroman9regular',
+    'cmr10': 'lmroman10regular', 'cmr12': 'lmroman12regular', 'cmr17': 'lmroman17regular',
+    'cmbx10': 'lmroman10bold', 'cmbx12': 'lmroman12bold',
+    'cmti10': 'lmromanslant10regular', 'cmsl10': 'lmromanoblique10regular',
+    'cmtt10': 'lmmono10regular', 'cmtt12': 'lmmono12regular',
 }
 
 pymupdf_fonts = {
@@ -83,6 +89,13 @@ def _build_font_index():
             os.path.expanduser("~/.fonts"),
             os.path.expanduser("~/.local/share/fonts"),
         ]
+        import glob as _glob
+        for _pattern in [
+            "/usr/share/texlive/texmf-dist/fonts/opentype/public/lm",
+            "/usr/share/texmf/fonts/opentype/public/lm",
+            "/usr/local/texlive/*/texmf-dist/fonts/opentype/public/lm",
+        ]:
+            dirs.extend(d for d in _glob.glob(_pattern) if os.path.isdir(d))
 
     index = []
     for d in dirs:

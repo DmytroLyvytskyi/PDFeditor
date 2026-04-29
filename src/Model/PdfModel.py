@@ -2,6 +2,7 @@ import atexit
 import hashlib
 import os
 import shutil
+import sys
 import tempfile
 import pymupdf
 from PySide6.QtGui import QColor
@@ -77,7 +78,9 @@ class PdfModel:
                 visited.add(xref)
 
                 try:
-                    font_bytes = self.file.extract_font(xref)[3]
+                    extracted_info = self.file.extract_font(xref)
+                    font_bytes = extracted_info[3]
+                    font_ext = (extracted_info[1] or '').lower()
                     if not font_bytes:
                         continue
                     name = base
@@ -86,11 +89,17 @@ class PdfModel:
                         fp.write(font_bytes)
                     f = pymupdf.Font(fontbuffer=font_bytes)
                     font_type = font[2]
+                    if font_type == 'Type3':
+                        pdf_usable = False
+                    elif font_type == 'Type0' and sys.platform != 'win32':
+                        pdf_usable = font_ext in ('ttf', 'otf')
+                    else:
+                        pdf_usable = font_type != 'Type0'
                     self.font_cache[xref] = {
                         'codepoints': set(), 'tmp_path': tmp_path,
                         'name': name, 'category': classify_font(f),
                         'font_obj': f,
-                        '_pdf_usable': font_type != 'Type0',
+                        '_pdf_usable': pdf_usable,
                     }
                 except Exception:
                     continue
@@ -137,7 +146,8 @@ class PdfModel:
             )
             if has_renderable:
                 page.add_redact_annot(block['bbox'])
-        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE, graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
+        page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
+                              graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
         for x, y, text, font, fontsize, pdf_color, xref in override_spans:
             clean_text = text.replace('\x00', '').replace('\xad', '-')
             if clean_text.strip():
