@@ -207,18 +207,16 @@ def classify_font(f):
 
 
 def category_from_font_name(font_name):
-    n = font_name.lower().replace('-', '').replace(' ', '')
-    if any(x in n for x in ['mono', 'cour', 'typewriter', 'consol', 'inconsolata']):
+    _, is_bold, is_italic, is_mono = _parse_font_name(font_name)
+    if is_mono:
         return 'mono'
-    is_bold = any(x in n for x in ['bold', 'heavy', 'black', 'semibold'])
-    is_italic = any(x in n for x in ['italic', 'oblique'])
     if is_bold and is_italic:
         return 'serif_bold_italic'
     if is_bold:
         return 'serif_bold'
     if is_italic:
         return 'serif_italic'
-    if any(x in n for x in ['sans', 'helv', 'arial', 'gothic', 'grotesk']):
+    if re.search(r'sans|helv|arial|gothic|grotesk', _clean(font_name)):
         return 'sans'
     return 'serif'
 

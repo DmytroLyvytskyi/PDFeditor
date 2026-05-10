@@ -1,5 +1,6 @@
 import atexit
 import hashlib
+import math
 import os
 import shutil
 import sys
@@ -9,6 +10,12 @@ from PySide6.QtGui import QColor
 from src.View.utils import classify_font, resolve_font
 import re
 from PIL import Image
+try:
+    from fontTools.ttLib import TTFont
+    from fontTools.merge import Merger
+    _FONTTOOLS_AVAILABLE = True
+except ImportError:
+    _FONTTOOLS_AVAILABLE = False
 
 _FONTS_DIR = os.path.join(tempfile.gettempdir(), 'pdfeditor_fonts')
 _ORIGINALS_DIR = os.path.join(_FONTS_DIR, 'originals')
@@ -28,15 +35,18 @@ class PdfModel:
 
     def save_snapshot(self, page_index):
         try:
-            tmp = pymupdf.open()
-            tmp.insert_pdf(self.file, from_page=page_index, to_page=page_index)
-            data = tmp.tobytes(garbage=4, deflate=True)
-            tmp.close()
-            data_hash = hashlib.md5(data).digest()
+            _xrefs = self.file[page_index].get_contents()
+            data_hash = hashlib.md5(
+                b''.join(self.file.xref_stream(x) or b'' for x in _xrefs)
+            ).digest()
             if (self._undo_stack
                     and self._undo_stack[-1]['page'] == page_index
                     and self._undo_stack[-1].get('hash') == data_hash):
                 return
+            tmp = pymupdf.open()
+            tmp.insert_pdf(self.file, from_page=page_index, to_page=page_index)
+            data = tmp.tobytes(garbage=4, deflate=True)
+            tmp.close()
             self._undo_stack.append({'page': page_index, 'data': data, 'hash': data_hash})
             self._redo_stack.clear()
             if len(self._undo_stack) > 20:
@@ -100,6 +110,7 @@ class PdfModel:
                         'name': name, 'category': classify_font(f),
                         'font_obj': f,
                         '_pdf_usable': pdf_usable,
+                        'font_ext': font_ext,
                     }
                 except Exception:
                     continue
@@ -131,8 +142,63 @@ class PdfModel:
             for xref in xrefs:
                 self.font_cache[xref]['codepoints'] = all_codepoints
 
+            if _FONTTOOLS_AVAILABLE:
+                self._merge_subset_fonts(name, xrefs)
+
+    def _merge_subset_fonts(self, name, xrefs):
+        paths = []
+        for xref in xrefs:
+            p = self.font_cache[xref].get('tmp_path')
+            ext = self.font_cache[xref].get('font_ext', '')
+            if p and os.path.isfile(p):
+                paths.append((xref, p, ext))
+        if len(paths) < 2:
+            return
+        merged_path = os.path.join(_FONTS_DIR, f"merged_{name}.bin")
+        merged_bytes = None
+        try:
+            merger = Merger()
+            merged_font = merger.merge([p for _, p, _ in paths])
+            merged_font.save(merged_path)
+            merged_bytes = open(merged_path, 'rb').read()
+        except Exception:
+            pass
+        if merged_bytes is None:
+            ext = paths[0][2].lower()
+            if ext in ('pfa', 'pfb', ''):
+                try:
+                    from fontTools.t1Lib import T1Font
+                    base_font = T1Font(paths[0][1])
+                    base_cs = base_font.font.get('CharStrings', {})
+                    base_enc = list(base_font.font.get('Encoding', []))
+                    for _, src_path, _ in paths[1:]:
+                        src_font = T1Font(src_path)
+                        src_cs = src_font.font.get('CharStrings', {})
+                        src_enc = src_font.font.get('Encoding', [])
+                        for glyph_name, cs in src_cs.items():
+                            if glyph_name not in base_cs:
+                                base_cs[glyph_name] = cs
+                        for i, glyph_name in enumerate(src_enc):
+                            if i < len(base_enc) and base_enc[i] == '.notdef' and glyph_name != '.notdef':
+                                base_enc[i] = glyph_name
+                    base_font.font['CharStrings'] = base_cs
+                    base_font.font['Encoding'] = base_enc
+                    base_font.write(merged_path)
+                    merged_bytes = open(merged_path, 'rb').read()
+                except Exception:
+                    pass
+        if merged_bytes is None:
+            return
+        try:
+            merged_obj = pymupdf.Font(fontbuffer=merged_bytes)
+            for xref in xrefs:
+                self.font_cache[xref]['tmp_path'] = merged_path
+                self.font_cache[xref]['font_obj'] = merged_obj
+        except Exception:
+            pass
 
     def _full_redraw(self, page, override_spans):
+        links = page.get_links()
         self._redraw_id += 1
         rid = self._redraw_id
         blocks = page.get_text("dict")["blocks"]
@@ -148,18 +214,28 @@ class PdfModel:
                 page.add_redact_annot(block['bbox'])
         page.apply_redactions(images=pymupdf.PDF_REDACT_IMAGE_NONE,
                               graphics=pymupdf.PDF_REDACT_LINE_ART_NONE)
-        for x, y, text, font, fontsize, pdf_color, xref in override_spans:
+
+        for item in override_spans:
+            x, y, text, font, fontsize, pdf_color, xref = item[:7]
+            rotation = item[7] if len(item) > 7 else 0
             clean_text = text.replace('\x00', '').replace('\xad', '-')
-            if clean_text.strip():
-                tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
-                if tmp_path:
-                    fontname = f"{fontname}r{rid}"
-                self._fontname_info[fontname] = (xref, font)
-                if xref in self.font_cache:
-                    real_name = self.font_cache[xref]['name']
-                    existing = self._fontname_info.get(real_name)
-                    if existing is None or existing[0] == 0:
-                        self._fontname_info[real_name] = (xref, font)
+            if not clean_text.strip():
+                continue
+            tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
+            if tmp_path:
+                fontname = f"{fontname}r{rid}"
+            self._fontname_info[fontname] = (xref, font)
+            if xref in self.font_cache:
+                real_name = self.font_cache[xref]['name']
+                existing = self._fontname_info.get(real_name)
+                if existing is None or existing[0] == 0:
+                    self._fontname_info[real_name] = (xref, font)
+            try:
+                font_obj = pymupdf.Font(fontfile=tmp_path) if tmp_path else pymupdf.Font(fontname=fontname)
+            except Exception:
+                font_obj = pymupdf.Font(fontname='tiro')
+
+            if rotation == 0:
                 try:
                     if tmp_path:
                         page.insert_text((x, y), clean_text, fontsize=fontsize,
@@ -173,6 +249,23 @@ class PdfModel:
                                          fontname='tiro', color=pdf_color)
                     except Exception:
                         pass
+            else:
+                try:
+                    tw = pymupdf.TextWriter(page.rect)
+                    tw.append(pymupdf.Point(x, y), clean_text, font=font_obj, fontsize=fontsize)
+                    angle = math.radians(rotation)
+                    cos_a, sin_a = math.cos(angle), math.sin(angle)
+                    mat = pymupdf.Matrix(cos_a, sin_a, -sin_a, cos_a, 0, 0)
+                    tw.write_text(page, color=pdf_color, morph=(pymupdf.Point(x, y), mat))
+                except Exception:
+                    try:
+                        page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                         fontname='tiro', color=pdf_color, rotate=rotation)
+                    except Exception:
+                        pass
+
+        for link in links:
+            page.insert_link(link)
 
     def render_page(self, num, override_spans=None, zoom=1.0):
         if override_spans is not None:
@@ -325,6 +418,8 @@ class PdfModel:
                 continue
             for line in block['lines']:
                 groups = []
+                line_dir = line.get('dir', (1, 0))
+                rotation = round(math.degrees(math.atan2(-line_dir[1], line_dir[0]))) % 360
                 for span in line['spans']:
                     color_int = span['color']
                     r = (color_int >> 16) & 255
@@ -364,7 +459,7 @@ class PdfModel:
                         merged_text,
                         merged_bbox,
                         first['origin'],
-                        xref
+                        xref, rotation
                     ])
 
         return result
@@ -395,31 +490,7 @@ class PdfModel:
                 images=pymupdf.PDF_REDACT_IMAGE_NONE,
                 graphics=pymupdf.PDF_REDACT_LINE_ART_NONE
             )
-            for x, y, text, font, fontsize, pdf_color, xref in text_spans:
-                clean_text = text.replace('\x00', '')
-                if clean_text.strip():
-                    tmp_path, fontname = resolve_font(self.font_cache, xref, clean_text, font_name=font)
-                    if tmp_path:
-                        fontname = f"{fontname}r{rid}"
-                    self._fontname_info[fontname] = (xref, font)
-                    if xref in self.font_cache:
-                        real_name = self.font_cache[xref]['name']
-                        existing = self._fontname_info.get(real_name)
-                        if existing is None or existing[0] == 0:
-                            self._fontname_info[real_name] = (xref, font)
-                    try:
-                        if tmp_path:
-                            page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                             fontfile=tmp_path, fontname=fontname, color=pdf_color)
-                        else:
-                            page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                             fontname=fontname, color=pdf_color)
-                    except Exception:
-                        try:
-                            page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                             fontname='tiro', color=pdf_color)
-                        except Exception:
-                            pass
+            self._full_redraw(page, text_spans)
 
         self._page_spans_cache.pop(page.number, None)
         self.insert_images(page, images)
@@ -573,10 +644,12 @@ class PdfModel:
     def get_original_spans(self, page_index):
         if page_index not in self._page_spans_cache:
             converted = []
-            for size, font, qcolor, text, bbox, origin, xref in self.get_spans_i(page_index):
+            for span_data in self.get_spans_i(page_index):
+                size, font, qcolor, text, bbox, origin, xref = span_data[:7]
+                rotation = span_data[7] if len(span_data) > 7 else 0
                 x, y = origin
                 pdf_color = (qcolor.red() / 255.0, qcolor.green() / 255.0, qcolor.blue() / 255.0)
-                converted.append((x, y, text, font, size, pdf_color, xref))
+                converted.append((x, y, text, font, size, pdf_color, xref, rotation))
             self._page_spans_cache[page_index] = converted
         return self._page_spans_cache[page_index]
 
