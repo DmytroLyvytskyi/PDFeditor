@@ -105,15 +105,19 @@ class TextTool:
         result = []
         for lbl in self.edit_labels[page_index]:
             text_data = lbl.text_data
+            rotation = getattr(text_data, 'rotation', 0)
             original_screen_x = int(int(lbl.bbox[0] * scale_x) + x_offset - padding)
-            original_screen_y = int((text_data.origin[1] - text_data.size) * scale_y) + y_offset
+            if rotation in (90, 270):
+                original_screen_y = int(lbl.bbox[1] * scale_y) + y_offset
+            else:
+                original_screen_y = int((text_data.origin[1] - text_data.size) * scale_y) + y_offset
             delta_x = lbl.x() - original_screen_x
             delta_y = lbl.y() - original_screen_y
             pdf_x = text_data.origin[0] + delta_x / scale_x
             pdf_y = text_data.origin[1] + delta_y / scale_y
             color = text_data.color
             pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
-            result.append((pdf_x, pdf_y, text_data.text, text_data.font, text_data.size, pdf_color, text_data.xref))
+            result.append((pdf_x, pdf_y, text_data.text, text_data.font, text_data.size, pdf_color, text_data.xref, text_data.rotation))
         return result
 
     def save_text(self, x, y, page_index):
@@ -167,16 +171,23 @@ class TextTool:
         page_labels = []
         scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         saved = self._saved_text_data.get(page_index, [])
-        for i, (size, font, color, text, bbox, origin, xref) in enumerate(spans):
+        for i, span_data in enumerate(spans):
+            size, font, color, text, bbox, origin, xref = span_data[:7]
+            rotation = span_data[7] if len(span_data) > 7 else 0
             if i < len(saved):
                 text_data = saved[i]
                 text_data.origin = origin
+                text_data.rotation = rotation
             else:
-                text_data = TextData(text, font, size, color, origin, xref)
-            top = int((origin[1] - text_data.size) * scale_y)
+                text_data = TextData(text, font, size, color, origin, xref, rotation)
             left = int(bbox[0] * scale_x)
             width = int((bbox[2] - bbox[0]) * scale_x)
-            height = int(text_data.size * 1.3 * scale_y) + padding
+            if rotation in (90, 270):
+                top = int(bbox[1] * scale_y)
+                height = int((bbox[3] - bbox[1]) * scale_y) + padding
+            else:
+                top = int((origin[1] - text_data.size) * scale_y)
+                height = int(text_data.size * 1.3 * scale_y) + padding
             edit_text = EditTextQLabel(text_data, width + 2 * padding, height + padding, bbox, self.viewmodel, label)
             edit_text.scale_x = scale_x
             edit_text.scale_y = scale_y

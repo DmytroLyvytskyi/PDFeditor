@@ -112,9 +112,13 @@ class EditTextQLabel(QLabel):
             f = pymupdf.Font(fontfile=tmp_path)
         else:
             f = pymupdf.Font(fontname=fontname)
-        width = int(f.text_length(new_text, fontsize=self.text_data.size) * self.scale_x)
-        height = int(self.text_data.size * 1.3 * self.scale_y)
-        self.setFixedSize(width + 2 * padding, height + 2 * padding)
+        text_w = int(f.text_length(new_text, fontsize=self.text_data.size) * self.scale_x)
+        text_h = int(self.text_data.size * 1.3 * self.scale_y)
+        rotation = getattr(self.text_data, 'rotation', 0)
+        if rotation in (90, 270):
+            self.setFixedSize(text_h + 2 * padding, text_w + 2 * padding)
+        else:
+            self.setFixedSize(text_w + 2 * padding, text_h + 2 * padding)
         self.edit_text.deleteLater()
         self.edit_text = None
         self.show()
@@ -123,7 +127,11 @@ class EditTextQLabel(QLabel):
     def update_visual_size(self):
         padding = 5
         size = self.text_data.size
+        rotation = getattr(self.text_data, 'rotation', 0)
         metrics = QFontMetrics(QFont(self.text_data.font, int(size)))
-        width = int(metrics.horizontalAdvance(self.text_data.text) * self.scale_x)
-        height = int(size * 1.3 * self.scale_y) + padding
-        self.setFixedSize(width + 2 * padding, height + padding)
+        text_w = int(metrics.horizontalAdvance(self.text_data.text) * self.scale_x)
+        text_h = int(size * 1.3 * self.scale_y) + padding
+        if rotation in (90, 270):
+            self.setFixedSize(text_h + 2 * padding, text_w + padding)
+        else:
+            self.setFixedSize(text_w + 2 * padding, text_h + padding)

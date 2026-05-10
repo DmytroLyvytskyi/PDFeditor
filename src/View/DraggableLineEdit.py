@@ -21,6 +21,7 @@ class DraggableLineEdit(QLineEdit):
         self.textChanged.connect(self.adjust_size)
         self._current_color = None
         self._showing_dialog = False
+        self._committed = False
 
     def mousePressEvent(self, event):
         if event.button() == Qt.LeftButton:
@@ -75,6 +76,8 @@ class DraggableLineEdit(QLineEdit):
         self.adjust_size()
 
     def keyPressEvent(self, event):
+        if event.key() in (Qt.Key.Key_Return, Qt.Key.Key_Enter):
+            self._committed = True
         char = event.text()
         if char != "" and char != " " and self.xref != 0 and char.isprintable():
             if self.viewmodel.is_char_valid(self.xref, char) == False:
@@ -133,4 +136,11 @@ class DraggableLineEdit(QLineEdit):
                     QTimer.singleShot(0, show_warning)
                 return
         super().keyPressEvent(event)
+
+
+    def focusOutEvent(self, event):
+        if not self._committed and not self._showing_dialog:
+            self._committed = True
+            self.returnPressed.emit()
+        super().focusOutEvent(event)
 
