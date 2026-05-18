@@ -164,6 +164,19 @@ class PdfViewModel(QObject):
         self.Model.full_redraw_images(self.Model.file[page_index], images, text_spans)
         self.history_changed.emit()
 
+    def delete_pages(self, indices):
+        self.Model.delete_pages(indices)
+        self.loaded_count = 0
+        self.current_page = min(self.current_page, self.Model.total - 1)
+        self.page_number_changed.emit()
+        self.history_changed.emit()
+
+    def merge_file(self, path, insert_at):
+        self.Model.merge_file(path, insert_at)
+        self.loaded_count = 0
+        self.page_number_changed.emit()
+        self.history_changed.emit()
+
     def close_file(self):
         self.current_path = None
         self.current_page = 0

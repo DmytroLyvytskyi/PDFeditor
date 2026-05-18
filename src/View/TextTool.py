@@ -30,7 +30,8 @@ class TextTool:
                 self.viewmodel.commit_text_moves(page_index, spans)
                 self._pending_spans.pop(page_index, None)
                 self._saved_text_data.pop(page_index, None)
-            self._saved_text_data[page_index] = [lbl.text_data for lbl in labels]
+            else:
+                self._saved_text_data[page_index] = [lbl.text_data for lbl in labels]
             for label in labels:
                 if label.edit_text is not None:
                     try:
@@ -94,7 +95,7 @@ class TextTool:
         self._dirty_pages.clear()
         self._saved_text_data.clear()
 
-    def _collect_current_pdf_spans(self, page_index):
+    def _collect_spans_except(self, page_index, excluded_label=None):
         if page_index not in self.edit_labels:
             return []
         label = self.pages_QWidget[page_index]
@@ -104,6 +105,8 @@ class TextTool:
         padding = 5
         result = []
         for lbl in self.edit_labels[page_index]:
+            if excluded_label is not None and lbl is excluded_label:
+                continue
             text_data = lbl.text_data
             rotation = getattr(text_data, 'rotation', 0)
             original_screen_x = int(int(lbl.bbox[0] * scale_x) + x_offset - padding)
@@ -119,6 +122,13 @@ class TextTool:
             pdf_color = (color.red() / 255.0, color.green() / 255.0, color.blue() / 255.0)
             result.append((pdf_x, pdf_y, text_data.text, text_data.font, text_data.size, pdf_color, text_data.xref, text_data.rotation))
         return result
+
+    def _collect_current_pdf_spans(self, page_index):
+        return self._collect_spans_except(page_index)
+
+    def _on_editing_started(self, label, page_index):
+        spans = self._collect_spans_except(page_index, excluded_label=label)
+        self.page_manager.rerender_page(page_index, spans)
 
     def save_text(self, x, y, page_index):
         text = self.add_text.text()
@@ -194,6 +204,7 @@ class TextTool:
             edit_text.move(left + x_offset - padding, top + y_offset)
             edit_text.coords.connect(lambda x, y, bbox, pi=page_index: self.move_text(pi))
             edit_text.selected.connect(lambda l=edit_text: self._on_label_selected(l))
+            edit_text.editing_started.connect(lambda l=edit_text, pi=page_index: self._on_editing_started(l, pi))
             page_labels.append(edit_text)
         self.edit_labels[page_index] = page_labels
 
