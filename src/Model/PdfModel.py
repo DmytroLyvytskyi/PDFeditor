@@ -230,23 +230,45 @@ class PdfModel:
                 existing = self._fontname_info.get(real_name)
                 if existing is None or existing[0] == 0:
                     self._fontname_info[real_name] = (xref, font)
+            _data = self.font_cache.get(xref)
+            _cat = _data.get('category', 'serif') if _data else 'serif'
+            _fallback = {
+                'serif_bold': 'tibo', 'serif_italic': 'tiit', 'serif_bold_italic': 'tibi',
+                'sans': 'helv', 'mono': 'cour',
+            }.get(_cat, 'tiro')
+
             try:
                 font_obj = pymupdf.Font(fontfile=tmp_path) if tmp_path else pymupdf.Font(fontname=fontname)
             except Exception:
-                font_obj = pymupdf.Font(fontname='tiro')
+                tmp_path = None
+                fontname = _fallback
+                font_obj = pymupdf.Font(fontname=fontname)
 
             if rotation == 0:
                 try:
                     if tmp_path:
-                        page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                         fontfile=tmp_path, fontname=fontname, color=pdf_color)
+                        if ' ' in clean_text and font_obj.has_glyph(ord(' ')) == 0:
+                            words = clean_text.split(' ')
+                            n_adv = font_obj.glyph_advance(ord('n'))
+                            sp_w = (n_adv * 0.5 * fontsize) if n_adv > 0 else (fontsize * 0.25)
+                            cur_x = x
+                            for wi, word in enumerate(words):
+                                if word:
+                                    page.insert_text((cur_x, y), word, fontsize=fontsize,
+                                                     fontfile=tmp_path, fontname=fontname, color=pdf_color)
+                                    cur_x += font_obj.text_length(word, fontsize)
+                                if wi < len(words) - 1:
+                                    cur_x += sp_w
+                        else:
+                            page.insert_text((x, y), clean_text, fontsize=fontsize,
+                                             fontfile=tmp_path, fontname=fontname, color=pdf_color)
                     else:
                         page.insert_text((x, y), clean_text, fontsize=fontsize,
                                          fontname=fontname, color=pdf_color)
                 except Exception:
                     try:
                         page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                         fontname='tiro', color=pdf_color)
+                                         fontname=_fallback, color=pdf_color)
                     except Exception:
                         pass
             else:
@@ -260,7 +282,7 @@ class PdfModel:
                 except Exception:
                     try:
                         page.insert_text((x, y), clean_text, fontsize=fontsize,
-                                         fontname='tiro', color=pdf_color, rotate=rotation)
+                                         fontname=_fallback, color=pdf_color, rotate=rotation)
                     except Exception:
                         pass
 
@@ -429,12 +451,33 @@ class PdfModel:
                     xref = font_xref_map.get(font_base, 0)
                     key = (round(span['size'], 1), font_base, r, g, b, xref)
                     if groups and groups[-1][0] == key:
-                        groups[-1][1].append(span)
+                        last_span = groups[-1][1][-1]
+                        gap = span['bbox'][0] - last_span['bbox'][2]
+                        if gap > span['size'] * 0.5:
+                            groups.append((key, [span]))
+                        else:
+                            groups[-1][1].append(span)
                     else:
                         groups.append((key, [span]))
                 for key, spans_list in groups:
                     size_val, font_base, r, g, b, xref = key
-                    merged_text = ''.join(s['text'] for s in spans_list).replace('\x00', ' ').replace('\xad', '-')
+                    if len(spans_list) == 1:
+                        parts = [spans_list[0]['text']]
+                    else:
+                        parts = [spans_list[0]['text']]
+                        for i in range(1, len(spans_list)):
+                            prev_bbox = spans_list[i - 1]['bbox']
+                            curr_bbox = spans_list[i]['bbox']
+                            gap = curr_bbox[0] - prev_bbox[2]
+                            prev_text = spans_list[i - 1]['text'].replace('\x00', '')
+                            if (gap > 0 and prev_text
+                                    and not spans_list[i - 1]['text'].endswith(' ')
+                                    and not spans_list[i]['text'].startswith(' ')):
+                                avg_char_w = (prev_bbox[2] - prev_bbox[0]) / len(prev_text)
+                                if avg_char_w > 0 and gap > avg_char_w * 0.3:
+                                    parts.append(' ')
+                            parts.append(spans_list[i]['text'])
+                    merged_text = ''.join(parts).replace('\x00', ' ').replace('\xad', '-')
                     if not merged_text.strip():
                         continue
                     qcolor = QColor(r, g, b)
@@ -594,9 +637,12 @@ class PdfModel:
     def _remove_images_from_content_stream(self, page):
         try:
             image_names = set()
+            form_image_map = {}
+
             for img in page.get_images(full=True):
                 xref_img = img[0]
                 name = img[7]
+                referencer = img[9] if len(img) > 9 else 0
                 if not name:
                     continue
                 if xref_img and xref_img > 0:
@@ -607,32 +653,46 @@ class PdfModel:
                             continue
                     except Exception:
                         pass
-                image_names.add(name.encode())
+                if referencer > 0:
+                    form_image_map.setdefault(referencer, set()).add(name.encode())
+                else:
+                    image_names.add(name.encode())
 
-            if not image_names:
-                return
+            if image_names:
+                page.clean_contents(sanitize=False)
+                contents = page.get_contents()
+                if contents:
+                    xref = contents[0]
+                    stream = self.file.xref_stream(xref)
+                    if stream:
+                        modified = False
+                        new_stream = stream
+                        for name in image_names:
+                            pattern = rb'/' + re.escape(name) + rb'\s+Do'
+                            replaced = re.sub(pattern, b'', new_stream)
+                            if replaced != new_stream:
+                                new_stream = replaced
+                                modified = True
+                        if modified:
+                            self.file.update_stream(xref, new_stream)
 
-            page.clean_contents(sanitize=False)
-            contents = page.get_contents()
-            if not contents:
-                return
-
-            xref = contents[0]
-            stream = self.file.xref_stream(xref)
-            if not stream:
-                return
-
-            modified = False
-            new_stream = stream
-            for name in image_names:
-                pattern = rb'/' + re.escape(name) + rb'\s+Do'
-                replaced = re.sub(pattern, b'', new_stream)
-                if replaced != new_stream:
-                    new_stream = replaced
-                    modified = True
-
-            if modified:
-                self.file.update_stream(xref, new_stream)
+            for form_xref, names in form_image_map.items():
+                try:
+                    form_stream = self.file.xref_stream(form_xref)
+                    if not form_stream:
+                        continue
+                    modified = False
+                    new_stream = form_stream
+                    for name in names:
+                        pattern = rb'/' + re.escape(name) + rb'\s+Do'
+                        replaced = re.sub(pattern, b'', new_stream)
+                        if replaced != new_stream:
+                            new_stream = replaced
+                            modified = True
+                    if modified:
+                        self.file.update_stream(form_xref, new_stream)
+                except Exception:
+                    pass
 
         except Exception:
             pass
@@ -748,7 +808,20 @@ class PdfModel:
 
     def can_redo(self):
         return bool(self.file and self._redo_stack)
-        return bool(self.file and self._redo_stack)
+
+    def delete_pages(self, indices):
+        self.file.delete_pages(indices)
+        self.total = len(self.file)
+        self._page_spans_cache = {}
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+
+    def merge_file(self, path, insert_at):
+        other = pymupdf.open(path)
+        self.file.insert_pdf(other, start_at=insert_at)
+        other.close()
+        self.total = len(self.file)
+        self._page_spans_cache = {}
 
     def close_file(self):
         self.file.close() if self.file else None
@@ -756,6 +829,6 @@ class PdfModel:
         self.total = None
         self.font_cache = {}
         self._page_spans_cache = {}
-        self._undo_stack.clear() 
+        self._undo_stack.clear()
         self._redo_stack.clear()
 

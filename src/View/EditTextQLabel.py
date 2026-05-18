@@ -10,6 +10,7 @@ from src.View.utils import resolve_font
 class EditTextQLabel(QLabel):
     coords = Signal(int, int, tuple) # x,y
     selected = Signal(object)
+    editing_started = Signal(object)
     def __init__(self,text_data,width,height,bbox,viewmodel, parent=None):
         super().__init__(parent)
         self.drag = False
@@ -62,6 +63,7 @@ class EditTextQLabel(QLabel):
             self.edit_text.scale_y = self.scale_y
             self.edit_text.move(self.x(), self.y())
             self.hide()
+            self.editing_started.emit(self)
             self.edit_text.show()
             self.edit_text.setFocus()
             self.edit_text.setText(self.text_data.text)

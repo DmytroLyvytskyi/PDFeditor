@@ -5,7 +5,7 @@ from PySide6.QtWidgets import QFileDialog
 
 from src.View.DraggableImage import DraggableImage
 from src.View.ImageData import ImageData
-from src.View.utils import calculate_x_offset, get_scale
+from src.View.utils import calculate_x_offset, calculate_y_offset, get_scale
 
 
 class ImageTool:
@@ -103,9 +103,10 @@ class ImageTool:
         else:
             source_list = self.viewmodel.get_images_i(page_index)
 
+        y_offset = calculate_y_offset(label)
         for img in source_list:
             screen_x = round(img['x'] * scale_x + x_offset)
-            screen_y = round(img['y'] * scale_y)
+            screen_y = round(img['y'] * scale_y + y_offset)
             screen_w = round(img['w'] * scale_x)
             screen_h = round(img['h'] * scale_y)
             on_delete = self._make_edit_delete_callback(collection, page_index)
@@ -217,18 +218,19 @@ class ImageTool:
     def _widget_to_image_data(self, w, page_index):
         label = self.pages_QWidget[page_index]
         x_offset = calculate_x_offset(label)
+        y_offset = calculate_y_offset(label)
         scale_x, scale_y = get_scale(self.viewmodel, page_index, label)
         cx = w.x() + w.width() / 2
         cy = w.y() + w.height() / 2
 
         if w.rotation % 360 == 0:
             pdf_x = (cx - w._base_w / 2 - x_offset) / scale_x
-            pdf_y = (cy - w._base_h / 2) / scale_y
+            pdf_y = (cy - w._base_h / 2 - y_offset) / scale_y
             pdf_w = w._base_w / scale_x
             pdf_h = w._base_h / scale_y
         else:
             pdf_x = (w.x() - x_offset) / scale_x
-            pdf_y = w.y() / scale_y
+            pdf_y = (w.y() - y_offset) / scale_y
             pdf_w = w.width() / scale_x
             pdf_h = w.height() / scale_y
 

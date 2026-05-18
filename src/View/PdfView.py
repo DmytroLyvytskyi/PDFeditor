@@ -2,7 +2,8 @@ import os
 
 from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction, QPen, QFont
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
-    QLineEdit, QComboBox, QSpinBox, QColorDialog, QToolButton, QMenu, QApplication, QSizePolicy, QMessageBox
+    QLineEdit, QComboBox, QSpinBox, QColorDialog, QToolButton, QMenu, QApplication, QSizePolicy, QMessageBox, \
+    QDialog, QDialogButtonBox, QFormLayout, QRadioButton, QButtonGroup
 from PySide6.QtCore import Qt, QTimer, QEvent
 
 from src.View.DraggableLineEdit import DraggableLineEdit
@@ -138,6 +139,9 @@ class PdfView(QMainWindow):
         self.file_menu.addAction("Save", self._save_file)
         self.file_menu.addAction("Save As...", self._save_file_as)
         self.file_menu.addAction("Close", self._close_file)
+        self.file_menu.addSeparator()
+        self.file_menu.addAction("Delete Page(s)...", self._delete_pages)
+        self.file_menu.addAction("Merge PDF...", self._merge_pdf)
         self.file_btn.setMenu(self.file_menu)
         self.ui.toolBar.insertWidget(self.ui.actionView, self.file_btn)
         self.ui.toolBar.insertSeparator(self.ui.actionView)
@@ -233,7 +237,7 @@ class PdfView(QMainWindow):
         zoom_in_btn.triggered.connect(self._zoom_in)
         self.ui.toolBar.addAction(zoom_in_btn)
 
-        zoom_reset_btn = QAction("100%", self)
+        zoom_reset_btn = QAction("Reset Zoom", self)
         zoom_reset_btn.setToolTip("Reset Zoom (Ctrl+0)")
         zoom_reset_btn.triggered.connect(self._zoom_reset)
         self.ui.toolBar.addAction(zoom_reset_btn)
@@ -463,6 +467,78 @@ class PdfView(QMainWindow):
             self.font_choose.blockSignals(True)
             self.font_choose.setCurrentIndex(0)
             self.font_choose.blockSignals(False)
+
+    def _reload_pages(self):
+        self.text_tool.clear()
+        self.image_tool.clear()
+        self.page_manager.clear_pages()
+        self.viewmodel.loaded_count = 0
+        self.ui.total.setText(f"/{self.viewmodel.get_total()}")
+        cur = max(1, self.viewmodel.current_page + 1)
+        self.ui.page_selector.setText(str(cur))
+        self.page_manager.load_group()
+
+    def _delete_pages(self):
+        if not self.viewmodel.Model.file:
+            return
+        total = self.viewmodel.get_total()
+        cur = self.viewmodel.current_page + 1
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Delete Page(s)")
+        form = QFormLayout(dlg)
+        from_spin = QSpinBox(); from_spin.setRange(1, total); from_spin.setValue(cur)
+        to_spin   = QSpinBox(); to_spin.setRange(1, total);   to_spin.setValue(cur)
+        form.addRow("From page:", from_spin)
+        form.addRow("To page:",   to_spin)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText("Delete")
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        form.addRow(btns)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+        f, t = from_spin.value() - 1, to_spin.value() - 1
+        if f > t:
+            f, t = t, f
+        if t - f + 1 >= total:
+            QMessageBox.warning(self, "Delete Page(s)", "Cannot delete all pages.")
+            return
+        self.viewmodel.delete_pages(list(range(f, t + 1)))
+        self._reload_pages()
+
+    def _merge_pdf(self):
+        if not self.viewmodel.Model.file:
+            return
+        path, _ = QFileDialog.getOpenFileName(self, "Select PDF to merge", "", "PDF Files (*.pdf)")
+        if not path:
+            return
+        total = self.viewmodel.get_total()
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Merge PDF")
+        layout = QVBoxLayout(dlg)
+        rb_end = QRadioButton("Append at the end"); rb_end.setChecked(True)
+        rb_before = QRadioButton("Insert before page:")
+        page_spin = QSpinBox()
+        page_spin.setRange(1, total)
+        page_spin.setValue(1)
+        page_spin.setEnabled(False)
+        row = QHBoxLayout(); row.addWidget(rb_before); row.addWidget(page_spin)
+        rb_end.toggled.connect(lambda checked: page_spin.setEnabled(not checked))
+        layout.addWidget(rb_end)
+        layout.addLayout(row)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        layout.addWidget(btns)
+
+        if dlg.exec() != QDialog.Accepted:
+            return
+        insert_at = total if rb_end.isChecked() else page_spin.value() - 1
+        self.viewmodel.merge_file(path, insert_at)
+        self._reload_pages()
 
     def _update_font_list(self):
         from src.View.utils import get_system_font_families
@@ -720,7 +796,7 @@ class PdfView(QMainWindow):
         self.zoom_label.setText(f"{int(zoom * 100)}%")
         if not self.pages_QWidget:
             return
-        self._zoom_timer.start(120)
+        self._zoom_timer.start(10)
 
     def _apply_zoom(self):
         if not self.pages_QWidget:
@@ -816,11 +892,6 @@ class PdfView(QMainWindow):
 
         cb.blockSignals(False)
 
-    def resizeEvent(self, event):
-        super().resizeEvent(event)
-        self._position_help_panel()
-        if self.pages_QWidget:
-            self._resize_timer.start(100)
 
     def _apply_resize(self):
         if not self.pages_QWidget:

@@ -171,10 +171,22 @@ def find_system_font_by_category(category):
 def find_system_font_for_pdf_font(font_cache_entry):
     if not font_cache_entry:
         return None
+    category = font_cache_entry.get('category', 'serif')
+    needs_bold = 'bold' in category
     path = find_system_font(font_cache_entry['name'])
+    if path and needs_bold:
+        try:
+            f = pymupdf.Font(fontfile=path)
+            name_l = (f.name or '').lower().replace('-', '').replace(' ', '')
+            found_bold = f.is_bold or bool(re.search(r'bold|heavy|black|semibold', name_l))
+            if not found_bold:
+                cat_path = find_system_font_by_category(category)
+                return cat_path if cat_path else path
+        except Exception:
+            pass
     if path:
         return path
-    return find_system_font_by_category(font_cache_entry.get('category', 'serif'))
+    return find_system_font_by_category(category)
 
 
 def get_system_font_families():
@@ -195,11 +207,13 @@ def classify_font(f):
         return 'symbol'
     if f.is_monospaced:
         return 'mono'
-    if f.is_bold and f.is_italic:
+    is_bold = f.is_bold or bool(re.search(r'bold|heavy|black|semibold', name_low))
+    is_italic = f.is_italic or bool(re.search(r'italic|oblique', name_low))
+    if is_bold and is_italic:
         return 'serif_bold_italic'
-    if f.is_bold:
+    if is_bold:
         return 'serif_bold'
-    if f.is_italic:
+    if is_italic:
         return 'serif_italic'
     if f.is_serif:
         return 'serif'
@@ -271,7 +285,9 @@ def resolve_font(font_cache, xref, text, font_name=None):
                 data['_pdf_usable'] = font_obj.has_glyph(ord('a')) > 0
             if data['_pdf_usable']:
                 if not chars or all(font_obj.has_glyph(ord(ch)) > 0 for ch in chars):
-                    return tmp_path, f"Fp{xref}"
+                    font_name_str = font_obj.name or ''
+                    if font_name_str and font_name_str != '(null)':
+                        return tmp_path, f"Fp{xref}"
     if data is not None:
         if '_sys_path' not in data:
             sp = find_system_font_for_pdf_font(data)
