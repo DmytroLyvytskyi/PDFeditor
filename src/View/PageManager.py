@@ -31,6 +31,8 @@ class PageManager:
                 left = mid+1
             else:
                 right = mid-1
+        left = min(left, len(self.pages_QWidget) - 1)
+        right = max(right, 0)
         distance_left = abs(self.pages_QWidget[left].y() - cur_height)
         distance_right = abs(self.pages_QWidget[right].y() - cur_height)
         if (distance_right < distance_left):

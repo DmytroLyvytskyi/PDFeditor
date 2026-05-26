@@ -796,7 +796,7 @@ class PdfView(QMainWindow):
         self.zoom_label.setText(f"{int(zoom * 100)}%")
         if not self.pages_QWidget:
             return
-        self._zoom_timer.start(10)
+        self._zoom_timer.start(100)
 
     def _apply_zoom(self):
         if not self.pages_QWidget:
@@ -811,6 +811,8 @@ class PdfView(QMainWindow):
         vis_start, vis_end = self._get_visible_page_range()
         for i in range(vis_start, vis_end):
             self.page_manager.rerender_page(i)
+
+        self.ui.scrollArea.widget().layout().activate()
 
         def rerender_rest():
             for i in range(len(self.pages_QWidget)):
@@ -831,7 +833,6 @@ class PdfView(QMainWindow):
                 self.image_tool.prepare_edit_mode_i(i)
 
         QTimer.singleShot(0, rerender_rest)
-        self.ui.scrollArea.widget().layout().activate()
         QTimer.singleShot(0, lambda: self.page_manager.scroll_to(current_page))
 
     def _get_visible_page_range(self):
