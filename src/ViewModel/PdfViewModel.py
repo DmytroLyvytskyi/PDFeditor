@@ -177,6 +177,13 @@ class PdfViewModel(QObject):
         self.page_number_changed.emit()
         self.history_changed.emit()
 
+    def insert_blank_page(self, insert_at, width, height):
+        self.Model.insert_blank_page(insert_at, width, height)
+        self.loaded_count = 0
+        self.current_page = insert_at
+        self.page_number_changed.emit()
+        self.history_changed.emit()
+
     def close_file(self):
         self.current_path = None
         self.current_page = 0

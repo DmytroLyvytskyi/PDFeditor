@@ -1,4 +1,6 @@
 import os
+import json
+import urllib.request
 
 from PySide6.QtGui import QPixmap, QActionGroup, QColor, QPainter, QIcon, QAction, QPen, QFont
 from PySide6.QtWidgets import QMainWindow, QPushButton, QVBoxLayout, QWidget, QFileDialog, QLabel, QHBoxLayout, \
@@ -14,6 +16,19 @@ from src.View.TextTool import TextTool
 from src.View.utils import get_font_category, pymupdf_fonts, find_system_font_by_category
 from src.ViewModel.EditorMode import EditorMode
 from untitled import Ui_MainWindow
+
+VERSION = "1.0.1"
+_RELEASES_API = "https://api.github.com/repos/DmytroLyvytskyi/PDFeditor/releases/latest"
+
+
+def _fetch_latest_version():
+    try:
+        with urllib.request.urlopen(_RELEASES_API, timeout=3) as r:
+            return json.loads(r.read()).get("tag_name", "")
+    except Exception:
+        return ""
+
+
 _HELP_TEXTS = {
     EditorMode.VIEW: (
         "<b>Shortcuts</b><br>"
@@ -80,6 +95,8 @@ class PdfView(QMainWindow):
 
         self.ui = Ui_MainWindow()
         self.ui.setupUi(self)
+        self.ui.actionEdit_Text.setText("Edit Texts")
+        self.ui.actionEdit_Image.setText("Edit Images")
         self.page_manager = PageManager(
             self.viewmodel,
             self.ui.scrollArea,
@@ -139,9 +156,6 @@ class PdfView(QMainWindow):
         self.file_menu.addAction("Save", self._save_file)
         self.file_menu.addAction("Save As...", self._save_file_as)
         self.file_menu.addAction("Close", self._close_file)
-        self.file_menu.addSeparator()
-        self.file_menu.addAction("Delete Page(s)...", self._delete_pages)
-        self.file_menu.addAction("Merge PDF...", self._merge_pdf)
         self.file_btn.setMenu(self.file_menu)
         self.ui.toolBar.insertWidget(self.ui.actionView, self.file_btn)
         self.ui.toolBar.insertSeparator(self.ui.actionView)
@@ -153,6 +167,8 @@ class PdfView(QMainWindow):
         self.ui.actionEdit_Text.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_TEXT))
         self.ui.actionEdit_Image.triggered.connect(lambda: self.viewmodel.set_mode(EditorMode.EDIT_IMAGE))
         self.ui.actionAdd_Image.triggered.connect(self._on_add_image_clicked)
+        self.ui.actionAdd_Page.triggered.connect(self._add_page)
+        self.ui.actionHelp.triggered.connect(self._show_about)
         self.viewmodel.history_changed.connect(self._on_history_changed)
 
         self.viewmodel.zoom_changed.connect(self._on_zoom_changed)
@@ -190,6 +206,19 @@ class PdfView(QMainWindow):
 
         self.font_choose.currentTextChanged.connect(self.change_font)
         self.size_choose.valueChanged.connect(self.change_size)
+
+        self._edit_pages_tb = QToolButton(self.ui.toolBar)
+        self._edit_pages_tb.setText("Edit Pages")
+        self._edit_pages_tb.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
+        self._edit_pages_tb.setStyleSheet("""
+            QToolButton::menu-indicator { image: none; }
+            QToolButton:hover { background-color: rgba(0, 0, 0, 30); border-radius: 4px; }
+        """)
+        edit_pages_menu = QMenu(self._edit_pages_tb)
+        edit_pages_menu.addAction("Remove Pages...", self._delete_pages)
+        edit_pages_menu.addAction("Insert Pages from PDF...", self._merge_pdf)
+        self._edit_pages_tb.setMenu(edit_pages_menu)
+        self.ui.toolBar.insertWidget(self.ui.actionHelp, self._edit_pages_tb)
 
         self.rotate_cw_btn = QAction("↻", self)
         self.rotate_ccw_btn = QAction("↺", self)
@@ -485,7 +514,7 @@ class PdfView(QMainWindow):
         cur = self.viewmodel.current_page + 1
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Delete Page(s)")
+        dlg.setWindowTitle("Remove Pages")
         form = QFormLayout(dlg)
         from_spin = QSpinBox(); from_spin.setRange(1, total); from_spin.setValue(cur)
         to_spin   = QSpinBox(); to_spin.setRange(1, total);   to_spin.setValue(cur)
@@ -503,7 +532,7 @@ class PdfView(QMainWindow):
         if f > t:
             f, t = t, f
         if t - f + 1 >= total:
-            QMessageBox.warning(self, "Delete Page(s)", "Cannot delete all pages.")
+            QMessageBox.warning(self, "Remove Pages", "Cannot delete all pages.")
             return
         self.viewmodel.delete_pages(list(range(f, t + 1)))
         self._reload_pages()
@@ -517,7 +546,7 @@ class PdfView(QMainWindow):
         total = self.viewmodel.get_total()
 
         dlg = QDialog(self)
-        dlg.setWindowTitle("Merge PDF")
+        dlg.setWindowTitle("Insert Pages from PDF")
         layout = QVBoxLayout(dlg)
         rb_end = QRadioButton("Append at the end"); rb_end.setChecked(True)
         rb_before = QRadioButton("Insert before page:")
@@ -539,6 +568,63 @@ class PdfView(QMainWindow):
         insert_at = total if rb_end.isChecked() else page_spin.value() - 1
         self.viewmodel.merge_file(path, insert_at)
         self._reload_pages()
+
+    def _add_page(self):
+        if not self.viewmodel.Model.file:
+            return
+        total = self.viewmodel.get_total()
+        cur = self.viewmodel.current_page + 1
+
+        dlg = QDialog(self)
+        dlg.setWindowTitle("Add Page")
+        layout = QVBoxLayout(dlg)
+        rb_end = QRadioButton("Append at the end")
+        rb_end.setChecked(True)
+        rb_before = QRadioButton("Insert before page:")
+        page_spin = QSpinBox()
+        page_spin.setRange(1, total)
+        page_spin.setValue(cur)
+        page_spin.setEnabled(False)
+        row = QHBoxLayout()
+        row.addWidget(rb_before)
+        row.addWidget(page_spin)
+        rb_end.toggled.connect(lambda checked: page_spin.setEnabled(not checked))
+        layout.addWidget(rb_end)
+        layout.addLayout(row)
+        btns = QDialogButtonBox(QDialogButtonBox.Ok | QDialogButtonBox.Cancel)
+        btns.button(QDialogButtonBox.Ok).setText("Add")
+        btns.accepted.connect(dlg.accept)
+        btns.rejected.connect(dlg.reject)
+        layout.addWidget(btns)
+        if dlg.exec() != QDialog.Accepted:
+            return
+        page = self.viewmodel.Model.file[self.viewmodel.current_page]
+        w, h = page.rect.width, page.rect.height
+        insert_at = total if rb_end.isChecked() else page_spin.value() - 1
+        self.viewmodel.insert_blank_page(insert_at, w, h)
+        self._reload_pages()
+        QTimer.singleShot(50, lambda: self.page_manager.scroll_to(self.viewmodel.current_page))
+
+    def _show_about(self):
+        msg = QMessageBox(self)
+        msg.setWindowTitle("Version")
+        msg.setTextFormat(Qt.TextFormat.RichText)
+        msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
+
+        latest = _fetch_latest_version()
+        if latest and latest.lstrip("v") != VERSION.lstrip("v"):
+            update_line = f"<br><b>New version available: {latest}</b><br>"
+        else:
+            update_line = ""
+
+        msg.setText(
+            f"<b>PdfEditor</b> v{VERSION}<br><br>"
+            f"{update_line}"
+            "<a href='https://github.com/DmytroLyvytskyi/PDFeditor'>"
+            "github.com/DmytroLyvytskyi/PDFeditor</a>"
+        )
+        msg.setIcon(QMessageBox.Icon.Information)
+        msg.exec()
 
     def _update_font_list(self):
         from src.View.utils import get_system_font_families

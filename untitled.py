@@ -3,7 +3,7 @@
 ################################################################################
 ## Form generated from reading UI file 'untitled.ui'
 ##
-## Created by: Qt User Interface Compiler version 6.9.0
+## Created by: Qt User Interface Compiler version 6.10.2
 ##
 ## WARNING! All changes made in this file will be lost when recompiling UI file!
 ################################################################################
@@ -54,6 +54,12 @@ class Ui_MainWindow(object):
         self.actionClose = QAction(MainWindow)
         self.actionClose.setObjectName(u"actionClose")
         self.actionClose.setMenuRole(QAction.MenuRole.NoRole)
+        self.actionAdd_Page = QAction(MainWindow)
+        self.actionAdd_Page.setObjectName(u"actionAdd_Page")
+        self.actionAdd_Page.setMenuRole(QAction.MenuRole.NoRole)
+        self.actionHelp = QAction(MainWindow)
+        self.actionHelp.setObjectName(u"actionHelp")
+        self.actionHelp.setMenuRole(QAction.MenuRole.NoRole)
         self.centralwidget = QWidget(MainWindow)
         self.centralwidget.setObjectName(u"centralwidget")
         self.verticalLayout = QVBoxLayout(self.centralwidget)
@@ -130,6 +136,9 @@ class Ui_MainWindow(object):
         self.toolBar.addSeparator()
         self.toolBar.addAction(self.actionAdd_Image)
         self.toolBar.addAction(self.actionEdit_Image)
+        self.toolBar.addSeparator()
+        self.toolBar.addAction(self.actionAdd_Page)
+        self.toolBar.addAction(self.actionHelp)
 
         self.retranslateUi(MainWindow)
 
@@ -147,6 +156,8 @@ class Ui_MainWindow(object):
         self.actionAdd_Image.setText(QCoreApplication.translate("MainWindow", u"Add Image", None))
         self.actionEdit_Image.setText(QCoreApplication.translate("MainWindow", u"Edit Image", None))
         self.actionClose.setText(QCoreApplication.translate("MainWindow", u"Close", None))
+        self.actionAdd_Page.setText(QCoreApplication.translate("MainWindow", u"Add Page", None))
+        self.actionHelp.setText(QCoreApplication.translate("MainWindow", u"Help", None))
         self.prev_btn.setText(QCoreApplication.translate("MainWindow", u"<-", None))
         self.total.setText(QCoreApplication.translate("MainWindow", u"/", None))
         self.next_btn.setText(QCoreApplication.translate("MainWindow", u"->", None))

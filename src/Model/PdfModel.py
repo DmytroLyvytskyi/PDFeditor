@@ -823,6 +823,13 @@ class PdfModel:
         self.total = len(self.file)
         self._page_spans_cache = {}
 
+    def insert_blank_page(self, insert_at, width, height):
+        self.file.new_page(pno=insert_at, width=width, height=height)
+        self.total = len(self.file)
+        self._page_spans_cache = {}
+        self._undo_stack.clear()
+        self._redo_stack.clear()
+
     def close_file(self):
         self.file.close() if self.file else None
         self.file = None
