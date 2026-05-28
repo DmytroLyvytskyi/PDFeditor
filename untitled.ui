@@ -133,6 +133,9 @@
    <addaction name="separator"/>
    <addaction name="actionAdd_Image"/>
    <addaction name="actionEdit_Image"/>
+   <addaction name="separator"/>
+   <addaction name="actionAdd_Page"/>
+   <addaction name="actionHelp"/>
   </widget>
   <widget class="QToolBar" name="toolBar_2">
    <property name="windowTitle">
@@ -215,6 +218,22 @@
   <action name="actionClose">
    <property name="text">
     <string>Close</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionAdd_Page">
+   <property name="text">
+    <string>Add Page</string>
+   </property>
+   <property name="menuRole">
+    <enum>QAction::MenuRole::NoRole</enum>
+   </property>
+  </action>
+  <action name="actionHelp">
+   <property name="text">
+    <string>Help</string>
    </property>
    <property name="menuRole">
     <enum>QAction::MenuRole::NoRole</enum>
