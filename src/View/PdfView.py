@@ -208,7 +208,7 @@ class PdfView(QMainWindow):
         self.size_choose.valueChanged.connect(self.change_size)
 
         self._edit_pages_tb = QToolButton(self.ui.toolBar)
-        self._edit_pages_tb.setText("Edit Pages")
+        self._edit_pages_tb.setText("Edit Pages ▾")
         self._edit_pages_tb.setPopupMode(QToolButton.ToolButtonPopupMode.InstantPopup)
         self._edit_pages_tb.setStyleSheet("""
             QToolButton::menu-indicator { image: none; }
@@ -607,7 +607,7 @@ class PdfView(QMainWindow):
 
     def _show_about(self):
         msg = QMessageBox(self)
-        msg.setWindowTitle("Version")
+        msg.setWindowTitle("Help")
         msg.setTextFormat(Qt.TextFormat.RichText)
         msg.setTextInteractionFlags(Qt.TextInteractionFlag.TextBrowserInteraction)
 
@@ -618,10 +618,14 @@ class PdfView(QMainWindow):
             update_line = ""
 
         msg.setText(
-            f"<b>PdfEditor</b> v{VERSION}<br><br>"
-            f"{update_line}"
-            "<a href='https://github.com/DmytroLyvytskyi/PDFeditor'>"
-            "github.com/DmytroLyvytskyi/PDFeditor</a>"
+            f"<b>PdfEditor</b> v{VERSION}<br>"
+            f"{update_line} <br><br>"
+            f"Dmytro Lyvytskyi 2026<br>"
+            f"<a href='mailto:dima1603liviz@gmail.com'>dima1603liviz@gmail.com</a><br><br>"
+            "Available versions: <a href='https://github.com/DmytroLyvytskyi/PDFeditor/releases'>"
+            "github.com/DmytroLyvytskyi/PDFeditor/releases</a> <br><br>"
+            "Documentation: <a href='https://github.com/DmytroLyvytskyi/PDFeditor#readme'>"
+            "github.com/DmytroLyvytskyi/PDFeditor#readme"
         )
         msg.setIcon(QMessageBox.Icon.Information)
         msg.exec()
